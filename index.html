@@ -4,26 +4,188 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Графики</title>
-<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "lightweight-charts": "https://cdn.jsdelivr.net/npm/lightweight-charts@5/+esm",
+    "lightweight-charts-drawing": "https://cdn.jsdelivr.net/npm/lightweight-charts-drawing@0.10.1/+esm"
+  }
+}
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
   <button id="back">‹ Список</button>
-  <div class="grp" id="srcG"><button id="srcB" class="on">Крипто</button><button id="srcM">MOEX</button></div>
+  <div class="grp" id="srcG">
+    <button id="srcB" class="on">Крипто</button>
+    <button id="srcM">MOEX</button>
+    <button id="srcF">Фьючерсы</button>
+  </div>
+  <button id="searchBtn" title="Поиск тикера (Ctrl+K)">🔍</button>
   <input id="sym" type="text" value="BTCUSDT" aria-label="Тикер">
   <button id="go">Открыть</button>
-  <div class="grp" id="tfs"></div>
-  <select id="style"><option value="c">Свечи</option><option value="l">Линия</option></select>
-  <label><input type="checkbox" id="sma" checked>SMA 20</label>
-  <label><input type="checkbox" id="ema" checked>EMA 50</label>
-  <div class="grp" id="tools"><button id="draw" title="Затем кликни по графику">Линия уровня</button><button id="clr">Стереть</button></div>
+  <button id="indBtn" title="Индикаторы (/)">📊 Индикаторы</button>
+  <button id="settingsBtn" title="Настройки графика">⚙</button>
   <span id="status"></span>
 </header>
+
 <main>
-  <div id="wrap"><div id="legend"></div><div id="chart"></div><div id="cdTag"></div><div id="err"></div></div>
-  <aside id="side"><h4>Список</h4><div id="wl"></div><button id="add">+ Добавить из поля</button></aside>
+  <aside id="drawing-toolbar"></aside>
+  <div id="wrap">
+    <div id="legend"></div>
+    <div id="chart"></div>
+    <div id="cdTag"></div>
+    <div id="err"></div>
+  </div>
+  <aside id="side">
+    <h4>Список</h4>
+    <div id="wl"></div>
+    <button id="add">+ Добавить из поля</button>
+  </aside>
 </main>
-<script src="app.js"></script>
+
+<div id="bottom" class="collapsed">
+  <div class="bottom-tabs">
+    <button data-tab="screener" class="on">Скринер</button>
+    <button data-tab="alerts">Алерты</button>
+    <button id="bottomToggle" title="Свернуть/развернуть">▾</button>
+  </div>
+  <div class="bottom-body">
+    <div id="screenerTab" class="bottom-pane on">
+      <div class="screener-wrap">
+        <div class="screener-head">
+          <span>Тикер</span>
+          <span>Цена</span>
+          <span>Изм. 24ч</span>
+          <span>Объём 24ч</span>
+          <span>Рынок</span>
+        </div>
+        <div id="screenerBody" class="screener-body"></div>
+      </div>
+    </div>
+    <div id="alertsTab" class="bottom-pane">
+      <div class="alerts-wrap">
+        <div class="alerts-toolbar">
+          <input id="alertSym" type="text" placeholder="Тикер (BTCUSDT)">
+          <select id="alertCond">
+            <option value="gt">Цена выше</option>
+            <option value="lt">Цена ниже</option>
+          </select>
+          <input id="alertPrice" type="text" placeholder="Цена">
+          <button id="alertAdd">Добавить алерт</button>
+        </div>
+        <div id="alertsList" class="alerts-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Настройки графика -->
+<div id="settingsPanel" class="hidden" aria-hidden="true">
+  <div class="tp-head"><b>Настройки графика</b><button id="settingsClose">×</button></div>
+  <div class="tp-body">
+    <div class="tp-sec">
+      <div class="tp-title">Таймфрейм</div>
+      <div class="grp tfs-group" id="tfs"></div>
+      <button id="addTf" class="tp-reset" style="margin-top:6px">+ Свой интервал</button>
+    </div>
+    <div class="tp-sec">
+      <div class="tp-title">Отображение</div>
+      <label class="tp-row"><span>Стиль графика</span>
+        <select id="style" class="tp-select">
+          <option value="c">Свечи</option><option value="l">Линия</option>
+        </select>
+      </label>
+    </div>
+    <button id="openTheme" class="tp-reset">🎨 Оформление</button>
+  </div>
+</div>
+<div id="settingsOverlay" class="hidden"></div>
+
+<!-- Индикаторы -->
+<div id="indicatorsModal" class="hidden" role="dialog" aria-label="Индикаторы">
+  <div id="indicatorsBox">
+    <div class="ind-head">
+      <b>Индикаторы</b>
+      <button id="indClose">×</button>
+    </div>
+    <div class="ind-search-wrap">
+      <input id="indSearch" type="text" placeholder="Поиск индикатора…" autocomplete="off">
+    </div>
+    <div id="indList" class="ind-list"></div>
+  </div>
+</div>
+
+<!-- Поиск -->
+<div id="searchModal" class="hidden" role="dialog" aria-label="Поиск тикера">
+  <div id="searchBox">
+    <div class="sb-input">
+      <span class="icon">🔍</span>
+      <input id="sbInput" type="text" placeholder="Тикер или название…" autocomplete="off" spellcheck="false">
+      <button id="sbClose">×</button>
+    </div>
+    <div class="sb-list" id="sbList"></div>
+    <div class="sb-footer"><span>↑↓ выбор</span><span>Enter открыть</span><span>Esc закрыть</span></div>
+  </div>
+</div>
+
+<!-- Оформление -->
+<div id="themePanel" class="hidden" aria-hidden="true">
+  <div class="tp-head"><b>Оформление</b><button id="themeClose">×</button></div>
+  <div class="tp-body">
+    <div class="tp-sec"><div class="tp-title">Встроенные пресеты</div><div class="tp-presets" id="presetBuiltin"></div></div>
+    <div class="tp-sec">
+      <div class="tp-title">Мои пресеты</div>
+      <div class="tp-save-row">
+        <input id="presetName" type="text" placeholder="Название пресета" maxlength="40">
+        <button id="presetSave">Сохранить</button>
+      </div>
+      <div id="presetCustom"></div>
+    </div>
+    <div class="tp-sec">
+      <div class="tp-title">Фон приложения</div>
+      <label class="tp-row"><span>Тип фона</span>
+        <select id="bgType" class="tp-select">
+          <option value="solid">Сплошной</option>
+          <option value="gradient">Градиент</option>
+          <option value="mesh">Пятна (mesh)</option>
+          <option value="dots">Точки</option>
+          <option value="grid">Сетка</option>
+        </select>
+      </label>
+      <label class="tp-row"><span>Цвет 1</span><input type="color" data-k="appbg"></label>
+      <label class="tp-row"><span>Цвет 2</span><input type="color" data-k="appbg2"></label>
+      <label class="tp-row"><span>Угол</span><input type="range" id="bgAngle" min="0" max="360" step="5"></label>
+    </div>
+    <div class="tp-sec">
+      <div class="tp-title">Панели и текст</div>
+      <label class="tp-row"><span>Панели</span><input type="color" data-k="panel"></label>
+      <label class="tp-row"><span>Текст интерфейса</span><input type="color" data-k="utext"></label>
+      <label class="tp-row"><span>Вторичный текст</span><input type="color" data-k="dimtext"></label>
+      <label class="tp-row"><span>Границы</span><input type="color" data-k="border"></label>
+      <label class="tp-row"><span>Акцент</span><input type="color" data-k="acc"></label>
+    </div>
+    <div class="tp-sec">
+      <div class="tp-title">Цвета движения</div>
+      <label class="tp-row"><span>Рост</span><input type="color" data-k="up"></label>
+      <label class="tp-row"><span>Падение</span><input type="color" data-k="down"></label>
+    </div>
+    <div class="tp-sec">
+      <div class="tp-title">Фон графика</div>
+      <label class="tp-row"><span>Фон</span><input type="color" data-k="chartBg"></label>
+      <label class="tp-row"><span>Сетка</span><input type="color" data-k="chartGrid"></label>
+      <label class="tp-row"><span>Текст осей</span><input type="color" data-k="chartText"></label>
+      <label class="tp-row"><span>Границы</span><input type="color" data-k="chartBorder"></label>
+    </div>
+    <button id="themeReset" class="tp-reset">Сбросить к тёмной</button>
+  </div>
+</div>
+<div id="themeOverlay" class="hidden"></div>
+
+<!-- Контекстное меню -->
+<div id="ctxMenu" class="hidden" role="menu"></div>
+
+<script type="module" src="app.js"></script>
 </body>
 </html>

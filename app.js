@@ -1,57 +1,767 @@
-const TF={crypto:{'15м':'15m','1ч':'1h','4ч':'4h','1д':'1d'},moex:{'10м':10,'1ч':60,'1д':24,'1н':7}};
-const DAYS={10:4,60:30,24:480,7:2500};
+import { createChart, CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
+import { DrawingManager } from 'lightweight-charts-drawing';
+
+const TF_BASE={
+  crypto:{'1с':'1s','5с':'5s','15с':'15s','30с':'30s','1м':'1m','5м':'5m','15м':'15m','30м':'30m','1ч':'1h','2ч':'2h','4ч':'4h','8ч':'8h','1д':'1d','1н':'1w','1мес':'1M'},
+  moex:{'1м':1,'10м':10,'1ч':60,'1д':24,'1н':7,'1мес':31,'1кв':4},
+  futures:{'1м':1,'10м':10,'1ч':60,'1д':24,'1н':7,'1мес':31,'1кв':4}
+};
+const TF_DEFAULT={crypto:'1h',moex:60,futures:60};
+const DAYS={1:2,5:3,10:7,60:30,240:120,24:480,7:2500,31:2500,4:2500};
 const $=id=>document.getElementById(id);
-const S={src:'crypto',sym:'BTCUSDT',tf:'1h',draw:false,data:[],lines:[]};
+const S={src:'crypto',sym:'BTCUSDT',tf:'1h',data:[],tfCustom:{}};
 const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 
-const chart=LightweightCharts.createChart($('chart'),{
-  layout:{background:{color:'#10151c'},textColor:'#7d8a9a'},
-  grid:{vertLines:{color:'#18202b'},horzLines:{color:'#18202b'}},
-  rightPriceScale:{borderColor:'#243040'},
-  timeScale:{borderColor:'#243040',timeVisible:true,secondsVisible:false},
-  crosshair:{mode:0},autoSize:true});
-let main=null;
-const vol=chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'v'});
-chart.priceScale('v').applyOptions({scaleMargins:{top:.82,bottom:0}});
-const sma=chart.addLineSeries({color:'#e0b04a',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-const ema=chart.addLineSeries({color:'#6aa5e8',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+/* ============ ОФОРМЛЕНИЕ ============ */
+const DEFAULTS={
+  bgType:'gradient',bgAngle:135,appbg:'#0e141c',appbg2:'#1a2637',
+  panel:'#161d27',utext:'#d6dde6',dimtext:'#7d8a9a',border:'#243040',acc:'#e0b04a',
+  up:'#2fb89a',down:'#e5604d',chartBg:'#10151c',chartGrid:'#18202b',
+  chartText:'#7d8a9a',chartBorder:'#243040',line:'#e0b04a',sma:'#e0b04a',ema:'#6aa5e8'
+};
+const BUILTIN={
+  dark:{...DEFAULTS},
+  light:{bgType:'gradient',bgAngle:135,appbg:'#eef2f9',appbg2:'#dbe4f2',panel:'#ffffff',utext:'#1c2530',dimtext:'#6b7889',border:'#dbe2ea',acc:'#c8922a',up:'#1a9e7f',down:'#d64b3a',chartBg:'#ffffff',chartGrid:'#eef2f6',chartText:'#6b7889',chartBorder:'#dbe2ea',line:'#c8922a',sma:'#c8922a',ema:'#3b7fd4'},
+  night:{bgType:'mesh',bgAngle:135,appbg:'#080d1a',appbg2:'#1a2b55',panel:'#111a2e',utext:'#c8d4e6',dimtext:'#6a7a96',border:'#1f2b45',acc:'#ffc94a',up:'#33d1a8',down:'#ff6b5a',chartBg:'#0a1020',chartGrid:'#141e33',chartText:'#6a7a96',chartBorder:'#1f2b45',line:'#ffc94a',sma:'#ffc94a',ema:'#5fa8ff'},
+  contrast:{bgType:'solid',bgAngle:0,appbg:'#000000',appbg2:'#000000',panel:'#0a0a0a',utext:'#ffffff',dimtext:'#999999',border:'#333333',acc:'#ffd400',up:'#00ff9d',down:'#ff3b30',chartBg:'#000000',chartGrid:'#1a1a1a',chartText:'#999999',chartBorder:'#333333',line:'#ffd400',sma:'#ffd400',ema:'#00b0ff'}
+};
+const BUILTIN_LABEL={dark:'Тёмная',light:'Светлая',night:'Ночная',contrast:'Контраст'};
 
-function mkMain(){
-  if(main)chart.removeSeries(main);
+let C={...DEFAULTS,...store.get('colors',{})};
+let customs=store.get('presets',{});
+
+/* ============ ГРАФИК ============ */
+const chart=createChart($('chart'),{
+  layout:{background:{color:C.chartBg},textColor:C.chartText},
+  grid:{vertLines:{color:C.chartGrid},horzLines:{color:C.chartGrid}},
+  rightPriceScale:{borderColor:C.chartBorder, scaleMargins: { top: 0.1, bottom: 0.3 }},
+  timeScale:{borderColor:C.chartBorder,timeVisible:true,secondsVisible:false},
+  crosshair:{mode:0},autoSize:true});
+
+let main=null,vol=null,drawingManager=null;
+let magnetEnabled=false;
+
+function createSeries(){
+  if(main){chart.removeSeries(main);main=null}
+  if(vol){chart.removeSeries(vol);vol=null}
+  if(drawingManager){try{drawingManager.destroy()}catch(e){}drawingManager=null}
+  
+  indicators.forEach(ind=>{
+    ind.series.forEach(s => { try{chart.removeSeries(s)}catch(e){} });
+    if(ind.pane){try{chart.removePane(ind.pane)}catch(e){}}
+  });
+  indicators=[];
+
   main=$('style').value==='c'
-    ?chart.addCandlestickSeries({upColor:'#2fb89a',downColor:'#e5604d',borderVisible:false,wickUpColor:'#2fb89a',wickDownColor:'#e5604d'})
-    :chart.addLineSeries({color:'#e0b04a',lineWidth:2});
-  paint();drawLines();
+    ?chart.addSeries(CandlestickSeries,{upColor:C.up,downColor:C.down,borderVisible:false,wickUpColor:C.up,wickDownColor:C.down,priceScaleId:'right'})
+    :chart.addSeries(LineSeries,{color:C.line,lineWidth:2,priceScaleId:'right'});
+  
+  vol=chart.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'v'});
+  chart.priceScale('v').applyOptions({scaleMargins:{top:.8,bottom:0}});
+
+  drawingManager=new DrawingManager(chart,main,{magnet:magnetEnabled?'weak':'off'});
+  loadDrawings();
+  
+  activeIndicators.forEach(key=>{try{addIndicatorById(key,true)}catch(e){}});
 }
+
 const val=(b)=>$('style').value==='c'?b:{time:b.time,value:b.close};
 function calcSMA(d,n){const o=[];let s=0;d.forEach((b,i)=>{s+=b.close;if(i>=n)s-=d[i-n].close;if(i>=n-1)o.push({time:b.time,value:s/n})});return o}
 function calcEMA(d,n){const o=[],k=2/(n+1);let e=null;d.forEach((b,i)=>{e=e===null?b.close:b.close*k+e*(1-k);if(i>=n-1)o.push({time:b.time,value:e})});return o}
-function paint(){
-  main.setData(S.data.map(val));
-  vol.setData(S.data.map(b=>({time:b.time,value:b.volume,color:b.close>=b.open?'#2fb89a55':'#e5604d55'})));
-  sma.setData($('sma').checked?calcSMA(S.data,20):[]);
-  ema.setData($('ema').checked?calcEMA(S.data,50):[]);
+function calcRSI(d,n=14){
+  if(d.length<n+1)return[];
+  const o=[];let g=0,l=0;
+  for(let i=1;i<=n;i++){const diff=d[i].close-d[i-1].close;if(diff>0)g+=diff;else l-=diff}
+  g/=n;l/=n;
+  const rsi=v=>{const rs=l===0?100:g/l;return 100-100/(1+rs)};
+  o.push({time:d[n].time,value:rsi()});
+  for(let i=n+1;i<d.length;i++){
+    const diff=d[i].close-d[i-1].close;
+    g=(g*(n-1)+(diff>0?diff:0))/n;
+    l=(l*(n-1)+(diff<0?-diff:0))/n;
+    o.push({time:d[i].time,value:rsi()});
+  }
+  return o;
+}
+function calcBB(d,n=20,mult=2){
+  const upper=[],middle=[],lower=[];
+  for(let i=n-1;i<d.length;i++){
+    let s=0;for(let j=i-n+1;j<=i;j++)s+=d[j].close;
+    const mean=s/n;
+    let variance=0;for(let j=i-n+1;j<=i;j++)variance+=(d[j].close-mean)**2;
+    const sd=Math.sqrt(variance/n);
+    upper.push({time:d[i].time,value:mean+mult*sd});
+    middle.push({time:d[i].time,value:mean});
+    lower.push({time:d[i].time,value:mean-mult*sd});
+  }
+  return {upper,middle,lower};
+}
+function calcMACD(d,fast=12,slow=26,signal=9){
+  const emaF=calcEMA(d,fast),emaS=calcEMA(d,slow);
+  const map={};emaF.forEach(p=>map[p.time]=p.value);
+  const macd=[];emaS.forEach(p=>{if(map[p.time]!=null)macd.push({time:p.time,value:map[p.time]-p.value})});
+  if(macd.length<signal)return{macd:[],signal:[],hist:[]};
+  const k=2/(signal+1);let e=null;const sig=[];
+  macd.forEach((p,i)=>{e=e===null?p.value:p.value*k+e*(1-k);if(i>=signal-1)sig.push({time:p.time,value:e})});
+  const hist=[];const sigMap={};sig.forEach(p=>sigMap[p.time]=p.value);
+  macd.forEach(p=>{if(sigMap[p.time]!=null)hist.push({time:p.time,value:p.value-sigMap[p.time]})});
+  return {macd,signal:sig,hist};
 }
 
+function paint(){
+  if(!main)return;
+  main.setData(S.data.map(val));
+  vol.setData(S.data.map(b=>({time:b.time,value:b.volume,color:b.close>=b.open?C.up+'55':C.down+'55'})));
+  indicators.forEach(ind=>updateIndicator(ind));
+}
+
+/* ============ ИНДИКАТОРЫ ============ */
+const INDICATORS_CATALOG = [
+  {id:'sma20',name:'SMA 20',cat:'Trend'},
+  {id:'ema50',name:'EMA 50',cat:'Trend'},
+  {id:'sma200',name:'SMA 200',cat:'Trend'},
+  {id:'bb',name:'Bollinger Bands',cat:'Volatility'},
+  {id:'rsi',name:'RSI (14)',cat:'Momentum'},
+  {id:'macd',name:'MACD (12,26,9)',cat:'Momentum'},
+  {id:'volume',name:'Volume',cat:'Volume'}
+];
+let indicators=[];
+let activeIndicators=store.get('activeIndicators',['sma20','ema50']);
+let favoriteInds=store.get('favoriteInds',[]);
+
+function addIndicatorById(id, silent){
+  const exist=indicators.find(i=>i.id===id);
+  if(exist)return;
+  const ind={id, series:[]};
+  if(id==='sma20'){
+    ind.series.push(chart.addSeries(LineSeries,{color:'#e0b04a',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'SMA 20',priceScaleId:'right'}));
+  }else if(id==='ema50'){
+    ind.series.push(chart.addSeries(LineSeries,{color:'#6aa5e8',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'EMA 50',priceScaleId:'right'}));
+  }else if(id==='sma200'){
+    ind.series.push(chart.addSeries(LineSeries,{color:'#c47de0',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'SMA 200',priceScaleId:'right'}));
+  }else if(id==='bb'){
+    const c='#6aa5e8';
+    ind.series.push(chart.addSeries(LineSeries,{color:c,lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'BB upper',priceScaleId:'right'}));
+    ind.series.push(chart.addSeries(LineSeries,{color:c+'88',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'BB mid',priceScaleId:'right'}));
+    ind.series.push(chart.addSeries(LineSeries,{color:c,lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'BB lower',priceScaleId:'right'}));
+  }else if(id==='rsi'){
+    const pane=chart.addPane();
+    ind.pane=pane;
+    ind.series.push(chart.addSeries(LineSeries,{color:'#c47de0',lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'RSI',priceScaleId:'right'},pane));
+    ind.series.push(chart.addSeries(LineSeries,{color:'#e5604d',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'RSI 70',priceScaleId:'right'},pane));
+    ind.series.push(chart.addSeries(LineSeries,{color:'#2fb89a',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,title:'RSI 30',priceScaleId:'right'},pane));
+  }else if(id==='macd'){
+    const pane=chart.addPane();
+    ind.pane=pane;
+    ind.series.push(chart.addSeries(HistogramSeries,{color:'#6aa5e8',priceLineVisible:false,lastValueVisible:false,title:'MACD hist',priceScaleId:'right'},pane));
+    ind.series.push(chart.addSeries(LineSeries,{color:'#e0b04a',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'MACD',priceScaleId:'right'},pane));
+    ind.series.push(chart.addSeries(LineSeries,{color:'#e5604d',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'Signal',priceScaleId:'right'},pane));
+  }else if(id==='volume'){
+    return;
+  }
+  indicators.push(ind);
+  updateIndicator(ind);
+  if(!silent){
+    activeIndicators=[...new Set([...activeIndicators,id])];
+    store.set('activeIndicators',activeIndicators);
+  }
+  renderIndicatorList();
+}
+
+function removeIndicator(id){
+  const ind=indicators.find(i=>i.id===id);
+  if(!ind)return;
+  ind.series.forEach(s=>{try{chart.removeSeries(s)}catch(e){}});
+  if(ind.pane){try{chart.removePane(ind.pane)}catch(e){}}
+  indicators=indicators.filter(i=>i.id!==id);
+  activeIndicators=activeIndicators.filter(i=>i!==id);
+  store.set('activeIndicators',activeIndicators);
+  renderIndicatorList();
+}
+
+function updateIndicator(ind){
+  const d=S.data;
+  if(!d.length)return;
+  if(ind.id==='sma20'){ind.series[0].setData(calcSMA(d,20));}
+  else if(ind.id==='ema50'){ind.series[0].setData(calcEMA(d,50));}
+  else if(ind.id==='sma200'){ind.series[0].setData(calcSMA(d,200));}
+  else if(ind.id==='bb'){
+    const {upper,middle,lower}=calcBB(d);
+    ind.series[0].setData(upper);ind.series[1].setData(middle);ind.series[2].setData(lower);
+  }else if(ind.id==='rsi'){
+    const rsi=calcRSI(d);
+    ind.series[0].setData(rsi);
+    ind.series[1].setData(rsi.map(p=>({time:p.time,value:70})));
+    ind.series[2].setData(rsi.map(p=>({time:p.time,value:30})));
+  }else if(ind.id==='macd'){
+    const {macd,signal,hist}=calcMACD(d);
+    ind.series[0].setData(hist.map(p=>({time:p.time,value:p.value,color:p.value>=0?C.up+'88':C.down+'88'})));
+    ind.series[1].setData(macd);
+    ind.series[2].setData(signal);
+  }
+}
+
+/* ============ ПАНЕЛЬ ИНДИКАТОРОВ ============ */
+function renderIndicatorList(filter=''){
+  const list=$('indList');list.innerHTML='';
+  const f=filter.toLowerCase();
+  const items=INDICATORS_CATALOG.filter(i=>!f||i.name.toLowerCase().includes(f)||i.cat.toLowerCase().includes(f));
+  if(!items.length){list.innerHTML='<div class="sb-empty">Ничего не найдено</div>';return}
+  items.sort((a,b)=>{
+    const fa=favoriteInds.includes(a.id),fb=favoriteInds.includes(b.id);
+    if(fa&&!fb)return -1;if(!fa&&fb)return 1;return a.name.localeCompare(b.name);
+  });
+  items.forEach(it=>{
+    const row=document.createElement('div');
+    row.className='ind-item'+(indicators.find(i=>i.id===it.id)?' active':'');
+    const star=document.createElement('span');
+    star.className='ind-star'+(favoriteInds.includes(it.id)?' on':'');
+    star.textContent=favoriteInds.includes(it.id)?'★':'☆';
+    star.onclick=(e)=>{e.stopPropagation();toggleFav(it.id)};
+    const name=document.createElement('span');
+    name.className='ind-name';name.textContent=it.name;
+    const cat=document.createElement('span');cat.className='ind-cat';cat.textContent=it.cat;
+    row.append(star,name,cat);
+    row.onclick=()=>{
+      if(indicators.find(i=>i.id===it.id)) removeIndicator(it.id);
+      else addIndicatorById(it.id);
+    };
+    list.append(row);
+  });
+}
+function toggleFav(id){
+  if(favoriteInds.includes(id)) favoriteInds=favoriteInds.filter(i=>i!==id);
+  else favoriteInds.push(id);
+  store.set('favoriteInds',favoriteInds);
+  renderIndicatorList($('indSearch').value);
+}
+
+function openIndicators(){$('indicatorsModal').classList.remove('hidden');$('indSearch').value='';renderIndicatorList();setTimeout(()=>$('indSearch').focus(),0)}
+function closeIndicators(){$('indicatorsModal').classList.add('hidden')}
+$('indBtn').onclick=openIndicators;
+$('indClose').onclick=closeIndicators;
+$('indicatorsModal').onclick=e=>{if(e.target===$('indicatorsModal'))closeIndicators()};
+$('indSearch').addEventListener('input',e=>renderIndicatorList(e.target.value));
+
+/* ============ ФОН ПРИЛОЖЕНИЯ ============ */
+function composeAppBg(){
+  const {bgType,appbg,appbg2,bgAngle}=C;
+  const a=bgAngle||135;let fill;
+  if(bgType==='gradient')fill=`linear-gradient(${a}deg, ${appbg} 0%, ${appbg2} 100%)`;
+  else if(bgType==='mesh')fill=`radial-gradient(ellipse at 15% 15%, ${appbg2}66 0%, transparent 55%),radial-gradient(ellipse at 85% 20%, ${appbg2}77 0%, transparent 50%),radial-gradient(ellipse at 70% 85%, ${appbg}cc 0%, transparent 65%),radial-gradient(ellipse at 20% 80%, ${appbg2}55 0%, transparent 60%),${appbg}`;
+  else if(bgType==='dots')fill=`radial-gradient(${appbg2}88 1px, transparent 1.5px) 0 0/22px 22px, ${appbg}`;
+  else if(bgType==='grid')fill=`linear-gradient(${appbg2}44 1px, transparent 1px) 0 0/34px 34px,linear-gradient(90deg, ${appbg2}44 1px, transparent 1px) 0 0/34px 34px,${appbg}`;
+  else fill=appbg;
+  document.documentElement.style.setProperty('--app-bg-fill',fill);
+  document.documentElement.style.setProperty('--app-bg',appbg);
+}
+
+function applyColors(){
+  store.set('colors',C);
+  composeAppBg();
+  const r=document.documentElement.style;
+  r.setProperty('--panel',C.panel);r.setProperty('--text',C.utext);r.setProperty('--dim',C.dimtext);
+  r.setProperty('--line',C.border);r.setProperty('--acc',C.acc);r.setProperty('--up',C.up);
+  r.setProperty('--down',C.down);r.setProperty('--chart-bg',C.chartBg);
+  chart.applyOptions({
+    layout:{background:{color:C.chartBg},textColor:C.chartText},
+    grid:{vertLines:{color:C.chartGrid},horzLines:{color:C.chartGrid}},
+    rightPriceScale:{borderColor:C.chartBorder},
+    timeScale:{borderColor:C.chartBorder}
+  });
+  if(main){
+    if($('style').value==='c')main.applyOptions({upColor:C.up,downColor:C.down,wickUpColor:C.up,wickDownColor:C.down});
+    else main.applyOptions({color:C.line});
+  }
+  if(S.data.length)paint();
+  updatePresetHighlight();
+}
+
+function syncInputs(){
+  document.querySelectorAll('#themePanel input[type=color]').forEach(inp=>{inp.value=C[inp.dataset.k]||'#000000'});
+  $('bgType').value=C.bgType||'gradient';$('bgAngle').value=C.bgAngle||135;
+}
+function updatePresetHighlight(){
+  document.querySelectorAll('.tp-presets button[data-preset]').forEach(b=>{
+    const p=BUILTIN[b.dataset.preset];if(!p)return;
+    const match=Object.keys(p).every(k=>String(p[k]).toLowerCase()===String(C[k]).toLowerCase());
+    b.classList.toggle('on',match);
+  });
+}
+
+/* ============ ПАНЕЛИ ============ */
+function openSettings(){$('settingsPanel').classList.remove('hidden');$('settingsOverlay').classList.remove('hidden')}
+function closeSettings(){$('settingsPanel').classList.add('hidden');$('settingsOverlay').classList.add('hidden')}
+function openPanel(){$('themePanel').classList.remove('hidden');$('themeOverlay').classList.remove('hidden');syncInputs()}
+function closePanel(){$('themePanel').classList.add('hidden');$('themeOverlay').classList.add('hidden')}
+$('settingsBtn').onclick=openSettings;
+$('settingsClose').onclick=closeSettings;
+$('settingsOverlay').onclick=closeSettings;
+$('openTheme').onclick=()=>{closeSettings();openPanel()};
+$('themeClose').onclick=closePanel;
+$('themeOverlay').onclick=closePanel;
+document.querySelectorAll('#themePanel input[type=color]').forEach(inp=>{
+  inp.oninput=e=>{C[inp.dataset.k]=e.target.value;applyColors()};
+});
+$('bgType').onchange=e=>{C.bgType=e.target.value;applyColors()};
+$('bgAngle').oninput=e=>{C.bgAngle=+e.target.value;applyColors()};
+
+/* ============ ПРЕСЕТЫ ============ */
+function renderPresets(){
+  const bEl=$('presetBuiltin');bEl.innerHTML='';
+  for(const key of Object.keys(BUILTIN)){
+    const b=document.createElement('button');b.textContent=BUILTIN_LABEL[key];b.dataset.preset=key;
+    b.onclick=()=>{C={...BUILTIN[key]};applyColors();syncInputs()};bEl.append(b);
+  }
+  const cEl=$('presetCustom');cEl.innerHTML='';
+  const names=Object.keys(customs);
+  if(!names.length){cEl.innerHTML='<div class="tp-empty">Нет сохранённых пресетов</div>';return}
+  for(const name of names){
+    const row=document.createElement('div');row.className='tp-saved';
+    const nm=document.createElement('button');nm.className='tp-saved-name';nm.textContent=name;
+    nm.onclick=()=>{C={...DEFAULTS,...customs[name]};applyColors();syncInputs()};
+    const del=document.createElement('button');del.className='tp-del';del.textContent='×';
+    del.onclick=(e)=>{e.stopPropagation();if(!confirm('Удалить "'+name+'"?'))return;delete customs[name];store.set('presets',customs);renderPresets()};
+    row.append(nm,del);cEl.append(row);
+  }
+  updatePresetHighlight();
+}
+$('presetSave').onclick=()=>{
+  const name=$('presetName').value.trim();if(!name)return;
+  if(customs[name]&&!confirm('Перезаписать?'))return;
+  customs[name]={...C};store.set('presets',customs);
+  $('presetName').value='';renderPresets();
+};
+$('themeReset').onclick=()=>{C={...DEFAULTS};applyColors();syncInputs()};
+
+/* ============ РИСОВАНИЕ ============ */
+const drawingsKey=()=>'drawings:'+S.src+':'+S.sym;
+function saveDrawings(){
+  if(!drawingManager)return;
+  try{store.set(drawingsKey(),drawingManager.exportJSON())}catch(e){}
+}
+let saveTimer=null;
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDrawings,400)}
+function loadDrawings(){
+  if(!drawingManager)return;
+  try{const j=store.get(drawingsKey(),null);if(j)drawingManager.importJSON(j)}catch(e){}
+}
+function tryDeleteSelected(){
+  if(!drawingManager)return false;
+  const ms=['removeSelectedDrawings','removeSelectedDrawing','removeSelected','deleteSelectedDrawing','deleteSelected','removeDrawing','deleteDrawing'];
+  for(const m of ms){if(typeof drawingManager[m]==='function'){try{drawingManager[m]();return true}catch(e){}}}
+  return false;
+}
+function tryClearAll(){
+  if(!drawingManager)return false;
+  const ms=['clear','clearAll','removeAll','deleteAll','importJSON'];
+  for(const m of ms){if(typeof drawingManager[m]==='function'){try{if(m==='importJSON')drawingManager[m]('[]');else drawingManager[m]();return true}catch(e){}}}
+  return false;
+}
+
+// Удаление фигуры колёсиком
+function deleteAtEvent(ev){
+  if(!drawingManager)return;
+  const rect=chart.chartElement().getBoundingClientRect();
+  const x=ev.clientX-rect.left,y=ev.clientY-rect.top;
+  const drawings=(drawingManager.drawings?.()||[]).slice().reverse();
+  const TOL=8;
+  for(const d of drawings){
+    if(!d.points?.length)continue;
+    let minX=1/0,maxX=-1/0,minY=1/0,maxY=-1/0;
+    for(const pt of d.points){
+      const px=chart.timeScale().timeToCoordinate(pt.time);
+      const py=main.priceToCoordinate(pt.price);
+      if(px==null||py==null)continue;
+      minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
+    }
+    if(!isFinite(minX))continue;
+    if(x>=minX-TOL&&x<=maxX+TOL&&y>=minY-TOL&&y<=maxY+TOL){
+      drawingManager.remove(d.id);scheduleSave();flash('Фигура удалена');return;
+    }
+  }
+}
+chart.chartElement().addEventListener('mousedown',ev=>{
+  if(ev.button===1){ev.preventDefault();ev.stopPropagation();deleteAtEvent(ev)}
+},{capture:true});
+
+// Автосохранение
+['mouseup','pointerup','touchend','keyup'].forEach(evt=>{
+  document.addEventListener(evt,()=>{if(drawingManager)scheduleSave()},{passive:true});
+});
+setInterval(()=>{if(drawingManager)saveDrawings()},3000);
+
+/* ============ ПАНЕЛЬ ИНСТРУМЕНТОВ ============ */
+const toolGroups=[
+  {icon:'📏',title:'Линии',tools:[
+    {icon:'╱',label:'Линия тренда',kind:'trend-line'},
+    {icon:'➡',label:'Луч',kind:'ray'},
+    {icon:'─',label:'Горизонтальная',kind:'horizontal-line'},
+    {icon:'│',label:'Вертикальная',kind:'vertical-line'},
+    {icon:'✛',label:'Перекрестие',kind:'cross-line'},
+    {icon:'══',label:'Канал',kind:'parallel-channel'},
+    {icon:'🔱',label:'Вилы',kind:'pitchfork'}
+  ]},
+  {icon:'🌀',title:'Фибоначчи',tools:[
+    {icon:'🔢',label:'Коррекция Фибо',kind:'fib-retracement'},
+    {icon:'📐',label:'Расширение Фибо',kind:'trend-based-fib-extension'},
+    {icon:'🌪',label:'Веер Фибо',kind:'fib-speed-resistance-fan'},
+    {icon:'⏱',label:'Временные зоны',kind:'fib-time-zone'}
+  ]},
+  {icon:'📐',title:'Паттерны',tools:[
+    {icon:'X',label:'XABCD',kind:'xabcd-pattern'},
+    {icon:'👤',label:'Голова и плечи',kind:'head-and-shoulders'},
+    {icon:'🌊',label:'Импульс Эллиотта',kind:'elliott-impulse'},
+    {icon:'△',label:'Треугольник',kind:'triangle-pattern'}
+  ]},
+  {icon:'📊',title:'Прогноз',tools:[
+    {icon:'📈',label:'Длинная позиция',kind:'long-position'},
+    {icon:'📉',label:'Короткая позиция',kind:'short-position'},
+    {icon:'📅',label:'Диапазон дат',kind:'date-range'},
+    {icon:'💰',label:'Диапазон цен',kind:'price-range'}
+  ]},
+  {icon:'🔷',title:'Фигуры',tools:[
+    {icon:'🖌',label:'Кисть',kind:'brush'},
+    {icon:'▭',label:'Прямоугольник',kind:'rectangle'},
+    {icon:'○',label:'Круг',kind:'circle'},
+    {icon:'△',label:'Треугольник',kind:'triangle'},
+    {icon:'➡',label:'Стрелка',kind:'arrow'}
+  ]},
+  {icon:'📝',title:'Аннотации',tools:[
+    {icon:'T',label:'Текст',kind:'text'},
+    {icon:'📌',label:'Заметка',kind:'note'},
+    {icon:'🏷',label:'Ценовая метка',kind:'price-label'},
+    {icon:'💬',label:'Выноска',kind:'callout'}
+  ]}
+];
+
+function setupToolbar(){
+  const tb=$('drawing-toolbar');tb.innerHTML='';
+  const cursorBtn=document.createElement('button');
+  cursorBtn.className='cursor-btn active';cursorBtn.innerHTML='✛';cursorBtn.title='Курсор (Esc)';
+  cursorBtn.onclick=()=>{activateTool('cross');setActive(cursorBtn)};
+  tb.appendChild(cursorBtn);
+
+  const magnetBtn=document.createElement('button');
+  magnetBtn.className='magnet-btn';magnetBtn.innerHTML=magnetEnabled?'🧲':'🚫';
+  magnetBtn.title='Магнит';
+  magnetBtn.onclick=()=>{
+    magnetEnabled=!magnetEnabled;
+    if(drawingManager)drawingManager.setMagnet(magnetEnabled?'weak':'off');
+    magnetBtn.innerHTML=magnetEnabled?'🧲':'🚫';
+    magnetBtn.classList.toggle('active',magnetEnabled);
+  };
+  if(magnetEnabled)magnetBtn.classList.add('active');
+  tb.appendChild(magnetBtn);
+
+  toolGroups.forEach(group=>{
+    const g=document.createElement('div');g.className='drawing-group';
+    const btn=document.createElement('button');btn.innerHTML=group.icon;btn.title=group.title;
+    btn.onclick=e=>{e.stopPropagation();if(group.tools[0])activateTool(group.tools[0].kind,btn)};
+    const menu=document.createElement('div');menu.className='drawing-group-menu';
+    group.tools.forEach(t=>{
+      const b=document.createElement('button');
+      b.innerHTML=`<span>${t.icon}</span><span>${t.label}</span>`;
+      b.onclick=()=>{activateTool(t.kind,btn);menu.style.display='none'};
+      menu.appendChild(b);
+    });
+    g.append(btn,menu);tb.appendChild(g);
+  });
+
+  const clearBtn=document.createElement('button');
+  clearBtn.className='clear-btn';clearBtn.innerHTML='🗑';clearBtn.title='Удалить все рисунки';
+  clearBtn.onclick=()=>{
+    if(!drawingManager)return;
+    if(!confirm('Удалить все рисунки для '+S.sym+'?'))return;
+    tryClearAll();store.set(drawingsKey(),'[]');flash('Все рисунки удалены');
+  };
+  tb.appendChild(clearBtn);
+}
+function setActive(btn){
+  document.querySelectorAll('#drawing-toolbar button').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+}
+function activateTool(kind,btn){
+  if(!drawingManager)return;
+  try{drawingManager.setTool(kind)}catch(e){console.warn('Tool not supported:',kind);try{drawingManager.setTool('cross')}catch(_){}}
+  setActive(btn);
+}
+
+/* ============ КОНТЕКСТНОЕ МЕНЮ ============ */
+const ctxMenu=$('ctxMenu');
+function showCtx(x,y){
+  ctxMenu.innerHTML='';
+  const items=[
+    {label:'Индикаторы…',hot:'/',act:openIndicators},
+    {label:'Настройки графика…',hot:'',act:openSettings},
+    {sep:true},
+    {label:'Скрыть все рисунки',hot:'Ctrl+Alt+H',act:()=>{
+      if(!drawingManager)return;
+      try{drawingManager.hideAll?.()}catch(e){}
+      document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');
+    }},
+    {label:'Сбросить масштаб',hot:'',act:()=>{chart.timeScale().fitContent();focusToPrice(S.data.length)}},
+    {sep:true},
+    {label:'Скопировать тикер',hot:'',act:()=>{navigator.clipboard?.writeText(S.sym);flash('Скопировано: '+S.sym)}},
+    {label:'Скриншот',hot:'',act:()=>{flash('Скриншот — в разработке')}}
+  ];
+  items.forEach(it=>{
+    if(it.sep){const d=document.createElement('div');d.className='ctx-sep';ctxMenu.appendChild(d);return}
+    const d=document.createElement('div');d.className='ctx-item';
+    d.innerHTML=`<span>${it.label}</span>${it.hot?`<span class="ctx-hot">${it.hot}</span>`:''}`;
+    d.onclick=()=>{hideCtx();it.act()};
+    ctxMenu.appendChild(d);
+  });
+  ctxMenu.classList.remove('hidden');
+  const w=ctxMenu.offsetWidth,h=ctxMenu.offsetHeight;
+  ctxMenu.style.left=Math.min(x,window.innerWidth-w-8)+'px';
+  ctxMenu.style.top=Math.min(y,window.innerHeight-h-8)+'px';
+}
+function hideCtx(){ctxMenu.classList.add('hidden')}
+document.addEventListener('contextmenu',e=>{
+  if(e.target.closest('#chart')||e.target.closest('#wrap')){
+    e.preventDefault();showCtx(e.clientX,e.clientY);
+  }
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#ctxMenu'))hideCtx()});
+
+/* ============ ГОРЯЧИЕ КЛАВИШИ ============ */
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toUpperCase();
+  const inInput=tag==='INPUT'||tag==='TEXTAREA'||e.target.isContentEditable;
+  if(inInput)return;
+
+  const ctrl=e.ctrlKey||e.metaKey;
+  if(ctrl&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();return}
+  if(e.key==='/'){e.preventDefault();openIndicators();return}
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='a'){e.preventDefault();$('bottom').classList.toggle('collapsed');return}
+  if(ctrl&&e.altKey&&e.key.toLowerCase()==='h'){
+    e.preventDefault();document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');return;
+  }
+  if(ctrl&&e.key.toLowerCase()==='s'){
+    e.preventDefault();saveDrawings();save();flash('Сохранено');return;
+  }
+  if(e.key==='Delete'||e.key==='Backspace'){
+    if(tryDeleteSelected()){e.preventDefault();scheduleSave();flash('Фигура удалена')}
+    return;
+  }
+  if(e.key==='Escape'){
+    activateTool('cross',document.querySelector('.cursor-btn'));
+    hideCtx();closeSearch();closeIndicators();return;
+  }
+  if(ctrl&&e.key.toLowerCase()==='z'){
+    if(typeof drawingManager?.undo==='function'){e.preventDefault();drawingManager.undo();scheduleSave()}
+    return;
+  }
+  if(ctrl&&e.key.toLowerCase()==='y'){
+    if(typeof drawingManager?.redo==='function'){e.preventDefault();drawingManager.redo();scheduleSave()}
+    return;
+  }
+  const map={'t':'trend-line','h':'horizontal-line','v':'vertical-line','r':'rectangle','f':'fib-retracement'};
+  if(map[e.key.toLowerCase()]&&!ctrl&&!e.altKey){
+    e.preventDefault();activateTool(map[e.key.toLowerCase()]);
+  }
+});
+
+/* ============ ТОСТ ============ */
+let toastEl=null;
+function flash(msg){
+  if(!toastEl){toastEl=document.createElement('div');toastEl.id='toast';document.body.appendChild(toastEl)}
+  toastEl.textContent=msg;toastEl.classList.add('on');
+  clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.classList.remove('on'),1500);
+}
+
+/* ============ НИЖНЯЯ ПАНЕЛЬ ============ */
+document.querySelectorAll('.bottom-tabs button[data-tab]').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.bottom-tabs button[data-tab]').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    document.querySelectorAll('.bottom-pane').forEach(p=>p.classList.remove('on'));
+    $(btn.dataset.tab+'Tab').classList.add('on');
+    $('bottom').classList.remove('collapsed');
+    if(btn.dataset.tab==='screener')renderScreener();
+    if(btn.dataset.tab==='alerts')renderAlerts();
+  };
+});
+$('bottomToggle').onclick=()=>$('bottom').classList.toggle('collapsed');
+
+function renderScreener(){
+  const body=$('screenerBody');body.innerHTML='';
+  if(!wl.length){body.innerHTML='<div class="sb-empty">Добавьте тикеры в список</div>';return}
+  wl.forEach(w=>{
+    const p=px[w.src+':'+w.sym];
+    const row=document.createElement('div');row.className='screener-row';
+    const price=p?.last!=null?fmtP(p.last):'—';
+    const pct=p?.pct!=null?((p.pct>=0?'+':'')+p.pct.toFixed(2)+'%'):'—';
+    const pctClass=p?.pct>=0?'up':(p?.pct<0?'down':'');
+    const vol=p?.vol!=null?fmtVol(p.vol):'—';
+    const srcName={crypto:'Крипто',moex:'MOEX',futures:'Фьюч'}[w.src];
+    row.innerHTML=`<span>${w.sym}</span><span>${price}</span><span class="${pctClass}">${pct}</span><span>${vol}</span><span style="color:var(--dim)">${srcName}</span>`;
+    row.onclick=()=>{setSrc(w.src);$('sym').value=w.sym;open_()};
+    body.appendChild(row);
+  });
+}
+function fmtVol(v){
+  if(v>=1e9)return (v/1e9).toFixed(2)+'B';
+  if(v>=1e6)return (v/1e6).toFixed(2)+'M';
+  if(v>=1e3)return (v/1e3).toFixed(2)+'K';
+  return v.toFixed(0);
+}
+
+/* ============ АЛЕРТЫ ============ */
+let alerts=store.get('alerts',[]);
+
+function renderAlerts(){
+  const list=$('alertsList');list.innerHTML='';
+  if(!alerts.length){list.innerHTML='<div class="sb-empty">Нет алертов</div>';return}
+  alerts.forEach((a,i)=>{
+    const d=document.createElement('div');d.className='alert-item'+(a.triggered?' triggered':'');
+    d.innerHTML=`<span class="alert-sym">${a.sym}</span>
+      <span class="alert-cond">${a.cond==='gt'?'выше':'ниже'}</span>
+      <span class="alert-price">${a.price}</span>
+      ${a.triggered?'<span style="color:var(--up)">✓ сработал</span>':''}
+      <button class="alert-x">×</button>`;
+    d.querySelector('.alert-x').onclick=()=>{alerts.splice(i,1);store.set('alerts',alerts);renderAlerts()};
+    list.appendChild(d);
+  });
+}
+$('alertAdd').onclick=()=>{
+  const sym=$('alertSym').value.trim().toUpperCase();
+  const cond=$('alertCond').value;
+  const price=parseFloat($('alertPrice').value);
+  if(!sym||!isFinite(price)){flash('Укажите тикер и цену');return}
+  alerts.push({sym,cond,price,triggered:false});
+  store.set('alerts',alerts);
+  $('alertSym').value='';$('alertPrice').value='';
+  renderAlerts();
+  flash('Алерт добавлен');
+};
+function checkAlerts(sym,price){
+  if(!alerts.length)return;
+  let changed=false;
+  alerts.forEach(a=>{
+    if(a.sym!==sym||a.triggered)return;
+    if((a.cond==='gt'&&price>a.price)||(a.cond==='lt'&&price<a.price)){
+      a.triggered=true;changed=true;
+      flash(`⚡ ${a.sym} ${a.cond==='gt'?'выше':'ниже'} ${a.price} (сейчас ${price})`);
+      if('Notification' in window&&Notification.permission==='granted'){
+        new Notification(`${a.sym}`,{body:`Цена ${price} ${a.cond==='gt'?'выше':'ниже'} ${a.price}`});
+      }
+    }
+  });
+  if(changed){store.set('alerts',alerts);renderAlerts()}
+}
+if('Notification' in window&&Notification.permission==='default'){
+  Notification.requestPermission();
+}
+
+/* ============ ПОИСК ============ */
+let searchIndex=null,searchResults=[],searchActive=-1;
+async function loadCryptoIndex(){
+  let r;try{r=await fetch('https://data-api.binance.vision/api/v3/exchangeInfo')}catch(e){r=await fetch('https://api.binance.com/api/v3/exchangeInfo')}
+  if(!r.ok)throw new Error('binance');
+  const j=await r.json();
+  return j.symbols.filter(s=>s.status==='TRADING'&&(s.quoteAsset==='USDT'||s.quoteAsset==='BTC'||s.quoteAsset==='ETH')).map(s=>({sym:s.symbol,name:`${s.baseAsset} / ${s.quoteAsset}`}));
+}
+async function loadMoexSharesIndex(){
+  const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME');
+  if(!r.ok)throw new Error('moex');
+  const j=await r.json(),c=j.securities.columns,rows=j.securities.data;
+  const iS=c.indexOf('SECID'),iN=c.indexOf('SHORTNAME');
+  return rows.map(x=>({sym:x[iS],name:x[iN]}));
+}
+async function loadFuturesIndex(){
+  const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME,LASTTRADEDATE');
+  if(!r.ok)throw new Error('moex');
+  const j=await r.json(),c=j.securities.columns,rows=j.securities.data;
+  const iS=c.indexOf('SECID'),iN=c.indexOf('SHORTNAME'),iD=c.indexOf('LASTTRADEDATE');
+  const today=new Date().toISOString().slice(0,10);
+  return rows.filter(x=>!x[iD]||x[iD]>=today).map(x=>({sym:x[iS],name:x[iN]||x[iS]}));
+}
+async function ensureSearchIndex(){
+  if(searchIndex)return searchIndex;
+  const c=store.get('searchIndex',null);
+  if(c&&c.ts>Date.now()-864e5&&c.data){searchIndex=c.data;return searchIndex}
+  const [crypto,moex,futures]=await Promise.all([loadCryptoIndex().catch(()=>[]),loadMoexSharesIndex().catch(()=>[]),loadFuturesIndex().catch(()=>[])]);
+  searchIndex={crypto,moex,futures};
+  try{store.set('searchIndex',{ts:Date.now(),data:searchIndex})}catch(e){}
+  return searchIndex;
+}
+function searchSymbols(q){
+  if(!searchIndex)return[];
+  q=q.trim().toLowerCase();if(!q)return[];
+  const out=[];
+  const match=(src,arr)=>{for(const it of arr){
+    if(it.sym.toLowerCase().includes(q)||(it.name&&it.name.toLowerCase().includes(q))){
+      out.push({src,sym:it.sym,name:it.name});
+      if(out.length>=60)return true;
+    }}return false;};
+  match('crypto',searchIndex.crypto)||match('moex',searchIndex.moex)||match('futures',searchIndex.futures);
+  return out;
+}
+const SRC_LABEL={crypto:'Крипто',moex:'MOEX',futures:'Фьюч'};
+function renderSearchResults(){
+  const list=$('sbList');list.innerHTML='';
+  if(!searchResults.length){list.innerHTML='<div class="sb-empty">'+(searchIndex?'Ничего не найдено':'Загрузка списка…')+'</div>';return}
+  searchResults.forEach((r,idx)=>{
+    const item=document.createElement('div');item.className='sb-item'+(idx===searchActive?' active':'');
+    item.innerHTML=`<span class="sb-badge ${r.src}">${SRC_LABEL[r.src]}</span><span class="sb-sym">${r.sym}</span><span class="sb-name">${r.name||''}</span>`;
+    item.onclick=()=>selectSearchResult(r);
+    list.append(item);
+  });
+}
+function scrollToActive(){const el=document.querySelector('.sb-item.active');if(el)el.scrollIntoView({block:'nearest'})}
+function selectSearchResult(r){closeSearch();setSrc(r.src);$('sym').value=r.sym;open_()}
+function openSearch(){
+  $('searchModal').classList.remove('hidden');
+  $('sbInput').value='';searchActive=-1;searchResults=[];
+  $('sbList').innerHTML='<div class="sb-empty">Загрузка списка…</div>';
+  setTimeout(()=>$('sbInput').focus(),0);
+  ensureSearchIndex().then(()=>renderSearchResults()).catch(()=>{$('sbList').innerHTML='<div class="sb-empty">Не удалось загрузить</div>'});
+}
+function closeSearch(){$('searchModal').classList.add('hidden')}
+$('searchBtn').onclick=openSearch;
+$('sbClose').onclick=closeSearch;
+$('searchModal').onclick=e=>{if(e.target===$('searchModal'))closeSearch()};
+$('sbInput').addEventListener('input',e=>{searchResults=searchSymbols(e.target.value);searchActive=searchResults.length?0:-1;renderSearchResults()});
+$('sbInput').addEventListener('keydown',e=>{
+  if(e.key==='Escape'){e.preventDefault();closeSearch();return}
+  if(e.key==='ArrowDown'){e.preventDefault();if(searchResults.length){searchActive=Math.min(searchActive+1,searchResults.length-1);renderSearchResults();scrollToActive()}}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(searchResults.length){searchActive=Math.max(searchActive-1,0);renderSearchResults();scrollToActive()}}
+  else if(e.key==='Enter'){e.preventDefault();if(searchActive>=0&&searchResults[searchActive])selectSearchResult(searchResults[searchActive])}
+});
+
+/* ============ ЗАГРУЗКА ДАННЫХ ============ */
 async function fetchBars(short){
   if(S.src==='crypto'){
     const q=`/api/v3/klines?symbol=${S.sym}&interval=${S.tf}&limit=500`;
-    let r;
-    try{r=await fetch('https://data-api.binance.vision'+q)}catch(e){r=await fetch('https://api.binance.com'+q)}
+    let r;try{r=await fetch('https://data-api.binance.vision'+q)}catch(e){r=await fetch('https://api.binance.com'+q)}
     if(!r.ok)throw new Error('Binance: тикер '+S.sym+' не найден');
     return (await r.json()).map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
   }
-  const days=short?(+S.tf===7?14:3):DAYS[S.tf];
+  const days=short?(+S.tf===7?14:3):(DAYS[+S.tf]||30);
   const from=new Date(Date.now()-days*864e5).toISOString().slice(0,10);
-  const u=`https://iss.moex.com/iss/engines/stock/markets/shares/securities/${S.sym}/candles.json?interval=${S.tf}&from=${from}`;
-  const r=await fetch(u);
-  if(!r.ok)throw new Error('MOEX недоступен');
+  const base=S.src==='futures'?`https://iss.moex.com/iss/engines/futures/markets/forts/securities/${S.sym}/candles.json`:`https://iss.moex.com/iss/engines/stock/markets/shares/securities/${S.sym}/candles.json`;
+  const r=await fetch(`${base}?interval=${S.tf}&from=${from}`);
+  if(!r.ok)throw new Error(S.src==='futures'?'MOEX (фьючерсы) недоступен':'MOEX недоступен');
   const j=await r.json(),c=j.candles.columns,rows=j.candles.data;
-  if(!rows.length)throw new Error('MOEX: нет данных по '+S.sym);
+  if(!rows.length)throw new Error('Нет данных по '+S.sym);
   const ix=n=>c.indexOf(n);
-  return rows.map(x=>({time:Date.parse(x[ix('begin')].replace(' ','T')+'Z')/1000,open:x[ix('open')],high:x[ix('high')],low:x[ix('low')],close:x[ix('close')],volume:x[ix('volume')]}));
+  
+  // Фильтруем строки, где close, open, high, low = null
+  return rows.map(x=>{
+    const open=x[ix('open')], high=x[ix('high')], low=x[ix('low')], close=x[ix('close')], volume=x[ix('volume')]||0;
+    if(open==null||high==null||low==null||close==null) return null;
+    return {time:Date.parse(x[ix('begin')].replace(' ','T')+'Z')/1000,open,high,low,close,volume};
+  }).filter(x => x !== null);
 }
 function err(m){const e=$('err');e.textContent=m;e.style.display=m?'block':'none'}
+function focusToPrice(len){
+  if(!len)return;
+  const N=mq.matches?80:120;const visible=Math.min(N,len);
+  const apply=()=>{try{chart.timeScale().setVisibleLogicalRange({from:Math.max(0,len-visible),to:len+2})}catch(e){try{chart.timeScale().fitContent()}catch(_){}}};
+  requestAnimationFrame(()=>requestAnimationFrame(apply));
+}
 let seq=0;
 async function load(first){
   const my=++seq;
@@ -59,27 +769,32 @@ async function load(first){
     const d=await fetchBars();
     if(my!==seq)return;
     err('');S.data=d;paint();
-    if(first){chart.timeScale().fitContent();live()}
+    focusToPrice(d.length);
+    if(first)live();
     legend(d[d.length-1],d[d.length-2]);
-  }catch(e){if(first)err(e.message||'Ошибка загрузки (проверь интернет/VPN)')}
+  }catch(e){if(first)err(e.message||'Ошибка загрузки')}
 }
 
-/* таймер до закрытия свечи — справа, под ценой */
-const IV={crypto:{'15m':900,'1h':3600,'4h':14400,'1d':86400},moex:{10:600,60:3600,24:86400,7:604800}};
+/* ============ ТАЙМЕР ============ */
+const IV={
+  crypto:{'1s':1,'5s':5,'15s':15,'30s':30,'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'8h':28800,'1d':86400,'1w':604800,'1M':2592000},
+  moex:{1:60,10:600,60:3600,24:86400,7:604800,31:2592000,4:7776000},
+  futures:{1:60,10:600,60:3600,24:86400,7:604800,31:2592000,4:7776000}
+};
 const p2=n=>String(n).padStart(2,'0');
 const fmtT=s=>{const d=new Date(s*1000);return p2(d.getUTCDate())+'.'+p2(d.getUTCMonth()+1)+' '+p2(d.getUTCHours())+':'+p2(d.getUTCMinutes())};
 function tickCd(){
   const e=$('cdTag'),b=S.data[S.data.length-1];
-  if(!b||!main||(S.src==='moex'&&+S.tf>=24)){e.style.display='none';return}
-  const iv=IV[S.src][S.tf],real=S.src==='crypto'?b.time:b.time-10800;
+  const needHide=(S.src!=='crypto'&&+S.tf>=24)||(S.src==='crypto'&&(S.tf==='1w'||S.tf==='1M'));
+  if(!b||!main||needHide){e.style.display='none';return}
+  const iv=IV[S.src][S.tf];if(!iv){e.style.display='none';return}
+  const real=S.src==='crypto'?b.time:b.time-10800;
   const r=real+iv-Math.floor(Date.now()/1000);
   const y=main.priceToCoordinate(b.close);
   if(r<=0||r>iv||y==null||y<0||y>$('chart').clientHeight-60){e.style.display='none';return}
   const h=Math.floor(r/3600),m=Math.floor(r%3600/60),s=r%60;
   e.innerHTML=(h?h+':'+p2(m):m)+':'+p2(s)+'<br><span class="dim">до '+fmtT(b.time+iv).slice(6)+'</span>';
-  e.style.width=chart.priceScale('right').width()+'px';
-  e.style.top=(y+11)+'px';
-  e.style.display='block';
+  e.style.width=chart.priceScale('right').width()+'px';e.style.top=(y+11)+'px';e.style.display='block';
 }
 setInterval(tickCd,250);
 
@@ -87,8 +802,7 @@ function legend(b,p){
   if(!b)return;
   const ref=p?p.close:b.open,ch=b.close-ref,pc=ch/ref*100,col=ch>=0?'var(--up)':'var(--down)';
   const f=n=>n>=100?n.toFixed(2):n.toPrecision(5).replace(/\.?0+$/,'');
-  $('legend').innerHTML=`<b>${S.sym}</b> <span style="color:var(--dim)">${S.tf}</span><br>
-  О ${f(b.open)} &nbsp;В ${f(b.high)} &nbsp;Н ${f(b.low)} &nbsp;З <span style="color:${col}">${f(b.close)} (${ch>=0?'+':''}${pc.toFixed(2)}%)</span>`;
+  $('legend').innerHTML=`<b>${S.sym}</b> <span style="color:var(--dim)">${S.tf}</span><br>О ${f(b.open)} В ${f(b.high)} Н ${f(b.low)} З <span style="color:${col}">${f(b.close)} (${ch>=0?'+':''}${pc.toFixed(2)}%)</span>`;
 }
 chart.subscribeCrosshairMove(p=>{
   if(!p.time||!S.data.length)return;
@@ -96,19 +810,28 @@ chart.subscribeCrosshairMove(p=>{
   if(i>=0)legend(S.data[i],S.data[i-1]);
 });
 
-
-/* реальное время */
+/* ============ REAL-TIME ============ */
 let ws=null,wsTry=0,poll=null,liveId=0;
 function setStatus(t,on){const e=$('status');e.textContent='● '+t;e.style.color=on?'var(--up)':'var(--dim)'}
 function applyBar(b){
   const L=S.data[S.data.length-1];
   if(L&&b.time<L.time)return;
   if(L&&b.time===L.time)S.data[S.data.length-1]=b;else S.data.push(b);
-  main.update(val(b));
-  vol.update({time:b.time,value:b.volume,color:b.close>=b.open?'#2fb89a55':'#e5604d55'});
-  if($('sma').checked){const a=calcSMA(S.data,20);if(a.length)sma.update(a[a.length-1])}
-  if($('ema').checked){const a=calcEMA(S.data,50);if(a.length)ema.update(a[a.length-1])}
+  if(main)main.update(val(b));
+  if(vol)vol.update({time:b.time,value:b.volume,color:b.close>=b.open?C.up+'55':C.down+'55'});
+  
+  // Обновляем индикаторы на лету
+  indicators.forEach(ind=>{
+    if(ind.id==='sma20'||ind.id==='ema50'||ind.id==='sma200'){
+       const d=S.data;
+       if(ind.id==='sma20') { const a=calcSMA(d,20); if(a.length) ind.series[0].update(a[a.length-1]); }
+       if(ind.id==='ema50') { const a=calcEMA(d,50); if(a.length) ind.series[0].update(a[a.length-1]); }
+       if(ind.id==='sma200'){ const a=calcSMA(d,200); if(a.length) ind.series[0].update(a[a.length-1]); }
+    }
+  });
+
   legend(S.data[S.data.length-1],S.data[S.data.length-2]);
+  checkAlerts(S.sym,b.close);
 }
 function live(){
   const id=++liveId;
@@ -123,65 +846,91 @@ function openWs(id){
   setStatus('подключение…',false);
   ws=new WebSocket(`${hosts[wsTry%2]}/ws/${S.sym.toLowerCase()}@kline_${S.tf}`);
   ws.onopen=()=>{const re=wsTry>0;wsTry=0;setStatus('live',true);if(re)load(false)};
-  ws.onmessage=m=>{
-    if(id!==liveId)return;
-    const k=JSON.parse(m.data).k;if(!k)return;
-    applyBar({time:Math.floor(k.t/1000),open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v});
-  };
-  ws.onclose=()=>{
-    if(id!==liveId)return;
-    wsTry++;setStatus('переподключение…',false);
-    setTimeout(()=>{if(id===liveId)openWs(id)},Math.min(1000*wsTry,5000));
-  };
+  ws.onmessage=m=>{if(id!==liveId)return;const k=JSON.parse(m.data).k;if(!k)return;applyBar({time:Math.floor(k.t/1000),open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v})};
+  ws.onclose=()=>{if(id!==liveId)return;wsTry++;setStatus('переподключение…',false);setTimeout(()=>{if(id===liveId)openWs(id)},Math.min(1000*wsTry,5000))};
 }
 async function pollMoex(id){
   if(document.hidden||id!==liveId)return;
-  try{
-    const d=await fetchBars(true);
-    if(id!==liveId)return;
-    d.slice(-3).forEach(applyBar);setStatus('обновление каждые 5 с',true);
-  }catch(e){setStatus('нет связи',false)}
+  try{const d=await fetchBars(true);if(id!==liveId)return;d.slice(-3).forEach(applyBar);setStatus('обновление каждые 5 с',true)}catch(e){setStatus('нет связи',false)}
 }
 
-/* уровни */
-const lkey=()=>'lines:'+S.src+':'+S.sym;
-function drawLines(){
-  S.lines.forEach(l=>main.removePriceLine(l));S.lines=[];
-  store.get(lkey(),[]).forEach(p=>S.lines.push(main.createPriceLine({price:p,color:'#e0b04a',lineWidth:1,lineStyle:2,axisLabelVisible:true})));
+/* ============ ИНТЕРФЕЙС ============ */
+function getTF(src){
+  const custom=S.tfCustom[src]||{};
+  return {...TF_BASE[src],...custom};
 }
-chart.subscribeClick(p=>{
-  if(!S.draw||!p.point)return;
-  const price=main.coordinateToPrice(p.point.y);
-  if(price==null)return;
-  const a=store.get(lkey(),[]);a.push(price);store.set(lkey(),a);drawLines();
-  S.draw=false;$('draw').classList.remove('on');
-});
-$('draw').onclick=()=>{S.draw=!S.draw;$('draw').classList.toggle('on',S.draw)};
-$('clr').onclick=()=>{store.set(lkey(),[]);drawLines()};
-
-/* интерфейс */
 function buildTf(){
-  const t=TF[S.src];S.tf=Object.values(t).includes(S.tf)||String(Object.values(t)).includes(S.tf)?S.tf:Object.values(t)[1];
+  const t=getTF(S.src);
+  const vals=Object.values(t);
+  if(!vals.some(v=>String(v)===String(S.tf)))S.tf=TF_DEFAULT[S.src];
   $('tfs').innerHTML='';
   for(const [k,v] of Object.entries(t)){
-    const b=document.createElement('button');b.textContent=k;b.classList.toggle('on',String(v)===String(S.tf));
+    const b=document.createElement('button');
+    b.textContent=k;b.classList.toggle('on',String(v)===String(S.tf));
     b.onclick=()=>{S.tf=v;buildTf();load(true)};$('tfs').append(b);
   }
+  const customKeys=Object.keys(S.tfCustom[S.src]||{});
+  customKeys.forEach(k=>{
+    const del=document.createElement('button');
+    del.textContent='× '+k;del.className='tf-custom';
+    del.title='Удалить кастомный интервал';
+    del.onclick=()=>{delete S.tfCustom[S.src][k];store.set('tfCustom',S.tfCustom);buildTf()};
+    $('tfs').append(del);
+  });
 }
+$('addTf').onclick=()=>{
+  const raw=prompt('Свой интервал (например, 3ч, 45м, 2д). Допустимо: с/м/ч/д/н');
+  if(!raw)return;
+  const m=raw.trim().toLowerCase().match(/^(\d+)([смчдн])$/);
+  if(!m){flash('Неверный формат. Например: 3ч');return}
+  const val=+m[1];const unit=m[2];
+  const label=val+unit;
+  let tfValue;
+  if(S.src==='crypto'){
+    const map={'с':'s','м':'m','ч':'h','д':'d','н':'w'};
+    tfValue=val+map[unit];
+  }else{
+    const mins={'м':1,'ч':60,'д':1440,'н':10080}[unit]*val;
+    const allowed=[1,10,60,24,7,31,4];
+    if(!allowed.includes(mins)){flash('MOEX поддерживает только 1м, 10м, 1ч, 1д, 1н, 1мес, 1кв');return}
+    tfValue=mins;
+  }
+  if(!S.tfCustom[S.src])S.tfCustom[S.src]={};
+  S.tfCustom[S.src][label]=tfValue;
+  store.set('tfCustom',S.tfCustom);
+  S.tf=tfValue;
+  buildTf();load(true);
+};
+
 function setSrc(s){
-  S.src=s;$('srcB').classList.toggle('on',s==='crypto');$('srcM').classList.toggle('on',s==='moex');
-  S.tf=Object.values(TF[s])[1];
+  S.src=s;
+  $('srcB').classList.toggle('on',s==='crypto');
+  $('srcM').classList.toggle('on',s==='moex');
+  $('srcF').classList.toggle('on',s==='futures');
+  S.tf=TF_DEFAULT[s];
 }
 $('srcB').onclick=()=>{setSrc('crypto');$('sym').value='BTCUSDT';open_()};
 $('srcM').onclick=()=>{setSrc('moex');$('sym').value='SBER';open_()};
-function open_(){if(mq.matches)view('chart');S.sym=$('sym').value.trim().toUpperCase()||S.sym;buildTf();drawLines();load(true);save()}
+$('srcF').onclick=()=>{setSrc('futures');$('sym').value='SiZ6';open_()};
+
+function open_(){
+  if(mq.matches)view('chart');
+  saveDrawings();
+  S.sym=$('sym').value.trim().toUpperCase()||S.sym;
+  buildTf();
+  createSeries();
+  load(true);
+  save();
+}
 $('go').onclick=open_;
 $('sym').addEventListener('keydown',e=>{if(e.key==='Enter')open_()});
-$('style').onchange=mkMain;
-$('sma').onchange=$('ema').onchange=paint;
+$('style').onchange=()=>{createSeries();paint()};
 
-/* список */
-let wl=store.get('wl',[{src:'crypto',sym:'BTCUSDT'},{src:'crypto',sym:'ETHUSDT'},{src:'moex',sym:'SBER'},{src:'moex',sym:'GAZP'}]);
+/* ============ СПИСОК ============ */
+let wl=store.get('wl',[
+  {src:'crypto',sym:'BTCUSDT'},{src:'crypto',sym:'ETHUSDT'},
+  {src:'moex',sym:'SBER'},{src:'moex',sym:'GAZP'}
+]);
 const mq=matchMedia('(max-width:700px)');
 function view(v){document.body.classList.toggle('m-chart',v==='chart');document.body.classList.toggle('m-list',v!=='chart');
   if(v==='chart'){try{history.pushState({c:1},'')}catch(e){}}}
@@ -205,14 +954,17 @@ function renderWl(){
       const c=p.pct>=0?'var(--up)':'var(--down)';
       pr.innerHTML=fmtP(p.last)+'<br><span style="color:'+c+'">'+(p.pct>=0?'+':'')+(+p.pct||0).toFixed(2)+'%</span>';
     }
-    const x=document.createElement('button');x.className='x';x.textContent='×';x.setAttribute('aria-label','Убрать');
-    x.onclick=()=>{wl.splice(i,1);store.set('wl',wl);renderWl()};
+    const x=document.createElement('button');x.className='x';x.textContent='×';
+    x.onclick=()=>{wl.splice(i,1);store.set('wl',wl);renderWl();renderScreener()};
     d.append(b,pr,x);$('wl').append(d);
   });
+  renderScreener();
 }
 async function loadPrices(){
-  const cr=wl.filter(w=>w.src==='crypto').map(w=>w.sym),mo=wl.filter(w=>w.src==='moex').map(w=>w.sym);
-  const put=t=>{px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent}};
+  const cr=wl.filter(w=>w.src==='crypto').map(w=>w.sym);
+  const mo=wl.filter(w=>w.src==='moex').map(w=>w.sym);
+  const fu=wl.filter(w=>w.src==='futures').map(w=>w.sym);
+  const put=t=>{px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent,vol:+t.quoteVolume}};
   if(cr.length){
     const base=async q=>{try{return await fetch('https://data-api.binance.vision'+q)}catch(e){return await fetch('https://api.binance.com'+q)}};
     try{
@@ -223,8 +975,14 @@ async function loadPrices(){
   }
   if(mo.length){
     try{
-      const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE&securities='+mo.join(','));
-      if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['moex:'+x[0]]={last:x[1],pct:x[2]}});
+      const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+mo.join(','));
+      if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['moex:'+x[0]]={last:x[1],pct:x[2],vol:x[3]}});
+    }catch(e){}
+  }
+  if(fu.length){
+    try{
+      const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+fu.join(','));
+      if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]}});
     }catch(e){}
   }
   renderWl();
@@ -235,9 +993,14 @@ $('add').onclick=()=>{
 };
 function save(){store.set('last',{src:S.src,sym:S.sym,tf:S.tf})}
 
+/* ============ СТАРТ ============ */
 const last=store.get('last',null);
+S.tfCustom=store.get('tfCustom',{});
 if(last){setSrc(last.src);S.sym=last.sym;S.tf=last.tf;$('sym').value=last.sym}
-buildTf();renderWl();mkMain();
+buildTf();renderWl();renderPresets();renderAlerts();
+setupToolbar();
+createSeries();
+applyColors();
 if(mq.matches)view('list');else load(true);
 loadPrices();
 setInterval(()=>{if(!document.hidden&&(!mq.matches||document.body.classList.contains('m-list')))loadPrices()},10000);
