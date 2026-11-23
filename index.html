@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Графики</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button id="back">‹ Список</button>
+  <div class="grp" id="srcG"><button id="srcB" class="on">Крипто</button><button id="srcM">MOEX</button></div>
+  <input id="sym" type="text" value="BTCUSDT" aria-label="Тикер">
+  <button id="go">Открыть</button>
+  <div class="grp" id="tfs"></div>
+  <select id="style"><option value="c">Свечи</option><option value="l">Линия</option></select>
+  <label><input type="checkbox" id="sma" checked>SMA 20</label>
+  <label><input type="checkbox" id="ema" checked>EMA 50</label>
+  <div class="grp" id="tools"><button id="draw" title="Затем кликни по графику">Линия уровня</button><button id="clr">Стереть</button></div>
+  <span id="status"></span>
+</header>
+<main>
+  <div id="wrap"><div id="legend"></div><div id="chart"></div><div id="cdTag"></div><div id="err"></div></div>
+  <aside id="side"><h4>Список</h4><div id="wl"></div><button id="add">+ Добавить из поля</button></aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

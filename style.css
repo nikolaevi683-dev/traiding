@@ -1,0 +1,45 @@
+:root{--bg:#10151c;--panel:#161d27;--line:#243040;--text:#d6dde6;--dim:#7d8a9a;--up:#2fb89a;--down:#e5604d;--acc:#e0b04a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+.grp{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:2px}
+button,select,input{font:inherit;color:var(--text);background:transparent;border:0;border-radius:4px;padding:5px 9px;cursor:pointer}
+button:hover{background:var(--line)}
+button.on{background:var(--acc);color:#1a1405}
+select,input[type=text]{background:var(--bg);border:1px solid var(--line)}
+input[type=text]{width:110px;text-transform:uppercase}
+label{display:flex;align-items:center;gap:4px;color:var(--dim);cursor:pointer}
+main{flex:1;display:flex;min-height:0}
+#wrap{flex:1;position:relative;min-width:0}
+#chart{position:absolute;inset:0}
+#legend{position:absolute;left:10px;top:8px;z-index:3;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 0 4px var(--bg)}
+#legend b{font-size:16px}
+#side{width:190px;background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:8px}
+#side h4{margin:0 0 6px;font-weight:600;color:var(--dim)}
+.wl{display:flex;justify-content:space-between;align-items:center;border-radius:4px}
+.wl button{flex:1;text-align:left}
+.wl .x{flex:0;color:var(--dim)}
+#err{position:absolute;inset:auto 10px 10px 10px;z-index:4;background:var(--down);color:#fff;padding:8px 10px;border-radius:6px;display:none}
+#status{margin-left:auto;color:var(--dim);font-size:12px;white-space:nowrap}
+#cdTag{position:absolute;right:0;z-index:3;text-align:center;font-size:11px;line-height:1.25;padding:2px 0;background:var(--panel);border-radius:2px;pointer-events:none;display:none;font-variant-numeric:tabular-nums}
+#cdTag .dim{color:var(--dim)}
+.wl .pr{font-size:12px;text-align:right;line-height:1.25;margin-right:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#back{display:none}
+#add{margin-top:6px}
+@media(max-width:700px){
+  header{flex-wrap:nowrap;overflow-x:auto;gap:6px;scrollbar-width:none}
+  header>*{flex-shrink:0}
+  main{flex-direction:column}
+  #side{width:auto;flex:1;border-left:0;padding:6px 12px}
+  .wl button{padding:12px 8px;font-size:16px}
+  .wl .pr{font-size:14px}
+  .wl .x{font-size:20px;padding:12px}
+  #add{width:100%;padding:12px}
+  body.m-list #tfs,body.m-list #style,body.m-list header label,body.m-list #tools,body.m-list #status,body.m-list #wrap{display:none}
+  body.m-list #sym{flex:1 1 auto;min-width:90px}
+  body.m-list header{overflow:visible}
+  body.m-chart #srcG,body.m-chart #sym,body.m-chart #go,body.m-chart #side{display:none}
+  body.m-chart #back{display:block}
+  body.m-chart #wrap{flex:1}
+}
