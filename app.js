@@ -34,7 +34,7 @@ let customs=store.get('presets',{});
 const chart=createChart($('chart'),{
   layout:{background:{color:C.chartBg},textColor:C.chartText},
   grid:{vertLines:{color:C.chartGrid},horzLines:{color:C.chartGrid}},
-  rightPriceScale:{borderColor:C.chartBorder, scaleMargins: { top: 0.1, bottom: 0.3 }},
+  rightPriceScale:{borderColor:C.chartBorder, scaleMargins:{top:0.1,bottom:0.3}},
   timeScale:{borderColor:C.chartBorder,timeVisible:true,secondsVisible:false},
   crosshair:{mode:0},autoSize:true});
 
@@ -42,12 +42,12 @@ let main=null,vol=null,drawingManager=null;
 let magnetEnabled=false;
 
 function createSeries(){
-  if(main){chart.removeSeries(main);main=null}
-  if(vol){chart.removeSeries(vol);vol=null}
   if(drawingManager){try{drawingManager.destroy()}catch(e){}drawingManager=null}
-  
+  if(main){try{chart.removeSeries(main)}catch(e){}main=null}
+  if(vol){try{chart.removeSeries(vol)}catch(e){}vol=null}
+
   indicators.forEach(ind=>{
-    ind.series.forEach(s => { try{chart.removeSeries(s)}catch(e){} });
+    ind.series.forEach(s=>{try{chart.removeSeries(s)}catch(e){}});
     if(ind.pane){try{chart.removePane(ind.pane)}catch(e){}}
   });
   indicators=[];
@@ -55,17 +55,17 @@ function createSeries(){
   main=$('style').value==='c'
     ?chart.addSeries(CandlestickSeries,{upColor:C.up,downColor:C.down,borderVisible:false,wickUpColor:C.up,wickDownColor:C.down,priceScaleId:'right'})
     :chart.addSeries(LineSeries,{color:C.line,lineWidth:2,priceScaleId:'right'});
-  
+
   vol=chart.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'v'});
   chart.priceScale('v').applyOptions({scaleMargins:{top:.8,bottom:0}});
 
   drawingManager=new DrawingManager(chart,main,{magnet:magnetEnabled?'weak':'off'});
   loadDrawings();
-  
+
   activeIndicators.forEach(key=>{try{addIndicatorById(key,true)}catch(e){}});
 }
 
-const val=(b)=>$('style').value==='c'?b:{time:b.time,value:b.close};
+const val=b=>$('style').value==='c'?b:{time:b.time,value:b.close};
 function calcSMA(d,n){const o=[];let s=0;d.forEach((b,i)=>{s+=b.close;if(i>=n)s-=d[i-n].close;if(i>=n-1)o.push({time:b.time,value:s/n})});return o}
 function calcEMA(d,n){const o=[],k=2/(n+1);let e=null;d.forEach((b,i)=>{e=e===null?b.close:b.close*k+e*(1-k);if(i>=n-1)o.push({time:b.time,value:e})});return o}
 function calcRSI(d,n=14){
@@ -73,7 +73,7 @@ function calcRSI(d,n=14){
   const o=[];let g=0,l=0;
   for(let i=1;i<=n;i++){const diff=d[i].close-d[i-1].close;if(diff>0)g+=diff;else l-=diff}
   g/=n;l/=n;
-  const rsi=v=>{const rs=l===0?100:g/l;return 100-100/(1+rs)};
+  const rsi=()=>{const rs=l===0?100:g/l;return 100-100/(1+rs)};
   o.push({time:d[n].time,value:rsi()});
   for(let i=n+1;i<d.length;i++){
     const diff=d[i].close-d[i-1].close;
@@ -116,7 +116,7 @@ function paint(){
 }
 
 /* ============ ИНДИКАТОРЫ ============ */
-const INDICATORS_CATALOG = [
+const INDICATORS_CATALOG=[
   {id:'sma20',name:'SMA 20',cat:'Trend'},
   {id:'ema50',name:'EMA 50',cat:'Trend'},
   {id:'sma200',name:'SMA 200',cat:'Trend'},
@@ -129,10 +129,10 @@ let indicators=[];
 let activeIndicators=store.get('activeIndicators',['sma20','ema50']);
 let favoriteInds=store.get('favoriteInds',[]);
 
-function addIndicatorById(id, silent){
+function addIndicatorById(id,silent){
   const exist=indicators.find(i=>i.id===id);
   if(exist)return;
-  const ind={id, series:[]};
+  const ind={id,series:[]};
   if(id==='sma20'){
     ind.series.push(chart.addSeries(LineSeries,{color:'#e0b04a',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'SMA 20',priceScaleId:'right'}));
   }else if(id==='ema50'){
@@ -217,7 +217,7 @@ function renderIndicatorList(filter=''){
     const star=document.createElement('span');
     star.className='ind-star'+(favoriteInds.includes(it.id)?' on':'');
     star.textContent=favoriteInds.includes(it.id)?'★':'☆';
-    star.onclick=(e)=>{e.stopPropagation();toggleFav(it.id)};
+    star.onclick=e=>{e.stopPropagation();toggleFav(it.id)};
     const name=document.createElement('span');
     name.className='ind-name';name.textContent=it.name;
     const cat=document.createElement('span');cat.className='ind-cat';cat.textContent=it.cat;
@@ -321,7 +321,7 @@ function renderPresets(){
     const nm=document.createElement('button');nm.className='tp-saved-name';nm.textContent=name;
     nm.onclick=()=>{C={...DEFAULTS,...customs[name]};applyColors();syncInputs()};
     const del=document.createElement('button');del.className='tp-del';del.textContent='×';
-    del.onclick=(e)=>{e.stopPropagation();if(!confirm('Удалить "'+name+'"?'))return;delete customs[name];store.set('presets',customs);renderPresets()};
+    del.onclick=e=>{e.stopPropagation();if(!confirm('Удалить "'+name+'"?'))return;delete customs[name];store.set('presets',customs);renderPresets()};
     row.append(nm,del);cEl.append(row);
   }
   updatePresetHighlight();
@@ -359,7 +359,6 @@ function tryClearAll(){
   return false;
 }
 
-// Удаление фигуры колёсиком
 function deleteAtEvent(ev){
   if(!drawingManager)return;
   const rect=chart.chartElement().getBoundingClientRect();
@@ -385,53 +384,52 @@ chart.chartElement().addEventListener('mousedown',ev=>{
   if(ev.button===1){ev.preventDefault();ev.stopPropagation();deleteAtEvent(ev)}
 },{capture:true});
 
-// Автосохранение
-['mouseup','pointerup','touchend','keyup'].forEach(evt=>{
-  document.addEventListener(evt,()=>{if(drawingManager)scheduleSave()},{passive:true});
+['mouseup','touchend'].forEach(evt=>{
+  chart.chartElement().addEventListener(evt,()=>{if(drawingManager)scheduleSave()},{passive:true});
 });
-setInterval(()=>{if(drawingManager)saveDrawings()},3000);
+setInterval(()=>{if(drawingManager)saveDrawings()},5000);
 
 /* ============ ПАНЕЛЬ ИНСТРУМЕНТОВ ============ */
 const toolGroups=[
-  {icon:'📏',title:'Линии',tools:[
+  {icon:'／',title:'Линии',tools:[
     {icon:'╱',label:'Линия тренда',kind:'trend-line'},
-    {icon:'➡',label:'Луч',kind:'ray'},
+    {icon:'→',label:'Луч',kind:'ray'},
     {icon:'─',label:'Горизонтальная',kind:'horizontal-line'},
     {icon:'│',label:'Вертикальная',kind:'vertical-line'},
     {icon:'✛',label:'Перекрестие',kind:'cross-line'},
     {icon:'══',label:'Канал',kind:'parallel-channel'},
-    {icon:'🔱',label:'Вилы',kind:'pitchfork'}
+    {icon:'⋔',label:'Вилы',kind:'pitchfork'}
   ]},
-  {icon:'🌀',title:'Фибоначчи',tools:[
-    {icon:'🔢',label:'Коррекция Фибо',kind:'fib-retracement'},
-    {icon:'📐',label:'Расширение Фибо',kind:'trend-based-fib-extension'},
-    {icon:'🌪',label:'Веер Фибо',kind:'fib-speed-resistance-fan'},
-    {icon:'⏱',label:'Временные зоны',kind:'fib-time-zone'}
+  {icon:'ƒ',title:'Фибоначчи',tools:[
+    {icon:'Ⅲ',label:'Коррекция Фибо',kind:'fib-retracement'},
+    {icon:'◇',label:'Расширение Фибо',kind:'trend-based-fib-extension'},
+    {icon:'◌',label:'Веер Фибо',kind:'fib-speed-resistance-fan'},
+    {icon:'◷',label:'Временные зоны',kind:'fib-time-zone'}
   ]},
-  {icon:'📐',title:'Паттерны',tools:[
+  {icon:'◇',title:'Паттерны',tools:[
     {icon:'X',label:'XABCD',kind:'xabcd-pattern'},
-    {icon:'👤',label:'Голова и плечи',kind:'head-and-shoulders'},
-    {icon:'🌊',label:'Импульс Эллиотта',kind:'elliott-impulse'},
+    {icon:'∩',label:'Голова и плечи',kind:'head-and-shoulders'},
+    {icon:'∿',label:'Импульс Эллиотта',kind:'elliott-impulse'},
     {icon:'△',label:'Треугольник',kind:'triangle-pattern'}
   ]},
-  {icon:'📊',title:'Прогноз',tools:[
-    {icon:'📈',label:'Длинная позиция',kind:'long-position'},
-    {icon:'📉',label:'Короткая позиция',kind:'short-position'},
-    {icon:'📅',label:'Диапазон дат',kind:'date-range'},
-    {icon:'💰',label:'Диапазон цен',kind:'price-range'}
+  {icon:'↗',title:'Прогноз',tools:[
+    {icon:'↗',label:'Длинная позиция',kind:'long-position'},
+    {icon:'↘',label:'Короткая позиция',kind:'short-position'},
+    {icon:'▦',label:'Диапазон дат',kind:'date-range'},
+    {icon:'＄',label:'Диапазон цен',kind:'price-range'}
   ]},
-  {icon:'🔷',title:'Фигуры',tools:[
-    {icon:'🖌',label:'Кисть',kind:'brush'},
+  {icon:'▱',title:'Фигуры',tools:[
+    {icon:'╱',label:'Кисть',kind:'brush'},
     {icon:'▭',label:'Прямоугольник',kind:'rectangle'},
     {icon:'○',label:'Круг',kind:'circle'},
     {icon:'△',label:'Треугольник',kind:'triangle'},
-    {icon:'➡',label:'Стрелка',kind:'arrow'}
+    {icon:'→',label:'Стрелка',kind:'arrow'}
   ]},
-  {icon:'📝',title:'Аннотации',tools:[
+  {icon:'T',title:'Аннотации',tools:[
     {icon:'T',label:'Текст',kind:'text'},
-    {icon:'📌',label:'Заметка',kind:'note'},
-    {icon:'🏷',label:'Ценовая метка',kind:'price-label'},
-    {icon:'💬',label:'Выноска',kind:'callout'}
+    {icon:'⌖',label:'Заметка',kind:'note'},
+    {icon:'◇',label:'Ценовая метка',kind:'price-label'},
+    {icon:'□',label:'Выноска',kind:'callout'}
   ]}
 ];
 
@@ -443,12 +441,12 @@ function setupToolbar(){
   tb.appendChild(cursorBtn);
 
   const magnetBtn=document.createElement('button');
-  magnetBtn.className='magnet-btn';magnetBtn.innerHTML=magnetEnabled?'🧲':'🚫';
+  magnetBtn.className='magnet-btn';magnetBtn.innerHTML=magnetEnabled?'⌁':'○';
   magnetBtn.title='Магнит';
   magnetBtn.onclick=()=>{
     magnetEnabled=!magnetEnabled;
     if(drawingManager)drawingManager.setMagnet(magnetEnabled?'weak':'off');
-    magnetBtn.innerHTML=magnetEnabled?'🧲':'🚫';
+    magnetBtn.innerHTML=magnetEnabled?'⌁':'○';
     magnetBtn.classList.toggle('active',magnetEnabled);
   };
   if(magnetEnabled)magnetBtn.classList.add('active');
@@ -469,7 +467,7 @@ function setupToolbar(){
   });
 
   const clearBtn=document.createElement('button');
-  clearBtn.className='clear-btn';clearBtn.innerHTML='🗑';clearBtn.title='Удалить все рисунки';
+  clearBtn.className='clear-btn';clearBtn.innerHTML='×';clearBtn.title='Удалить все рисунки';
   clearBtn.onclick=()=>{
     if(!drawingManager)return;
     if(!confirm('Удалить все рисунки для '+S.sym+'?'))return;
@@ -484,7 +482,9 @@ function setActive(btn){
 function activateTool(kind,btn){
   if(!drawingManager)return;
   try{drawingManager.setTool(kind)}catch(e){console.warn('Tool not supported:',kind);try{drawingManager.setTool('cross')}catch(_){}}
-  setActive(btn);
+  if(btn) setActive(btn);
+  else if(kind==='cross') setActive(document.querySelector('.cursor-btn'));
+  else document.querySelectorAll('#drawing-toolbar button').forEach(b=>b.classList.remove('active'));
 }
 
 /* ============ КОНТЕКСТНОЕ МЕНЮ ============ */
@@ -542,7 +542,8 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();saveDrawings();save();flash('Сохранено');return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){
-    if(tryDeleteSelected()){e.preventDefault();scheduleSave();flash('Фигура удалена')}
+    e.preventDefault();
+    if(tryDeleteSelected()){scheduleSave();flash('Фигура удалена')}
     return;
   }
   if(e.key==='Escape'){
@@ -626,11 +627,12 @@ function renderAlerts(){
   });
 }
 $('alertAdd').onclick=()=>{
-  const sym=$('alertSym').value.trim().toUpperCase();
+  const sym=$('alertSym').value.trim();
   const cond=$('alertCond').value;
   const price=parseFloat($('alertPrice').value);
   if(!sym||!isFinite(price)){flash('Укажите тикер и цену');return}
-  alerts.push({sym,cond,price,triggered:false});
+  const finalSym=S.src==='crypto'?sym.toUpperCase():sym;
+  alerts.push({sym:finalSym,cond,price,triggered:false});
   store.set('alerts',alerts);
   $('alertSym').value='';$('alertPrice').value='';
   renderAlerts();
@@ -656,12 +658,17 @@ if('Notification' in window&&Notification.permission==='default'){
 }
 
 /* ============ ПОИСК ============ */
-let searchIndex=null,searchResults=[],searchActive=-1;
+let searchIndex=null,searchResults=[],searchActive=-1,searchSrcFilter='all';
+const SRC_LABEL={crypto:'Крипто',moex:'MOEX',futures:'Фьючерсы'};
+const SRC_ORDER=['crypto','moex','futures'];
+
 async function loadCryptoIndex(){
   let r;try{r=await fetch('https://data-api.binance.vision/api/v3/exchangeInfo')}catch(e){r=await fetch('https://api.binance.com/api/v3/exchangeInfo')}
   if(!r.ok)throw new Error('binance');
   const j=await r.json();
-  return j.symbols.filter(s=>s.status==='TRADING'&&(s.quoteAsset==='USDT'||s.quoteAsset==='BTC'||s.quoteAsset==='ETH')).map(s=>({sym:s.symbol,name:`${s.baseAsset} / ${s.quoteAsset}`}));
+  return j.symbols
+    .filter(s=>s.status==='TRADING'&&(s.quoteAsset==='USDT'||s.quoteAsset==='BTC'||s.quoteAsset==='ETH'))
+    .map(s=>({sym:s.symbol,name:`${s.baseAsset} / ${s.quoteAsset}`}));
 }
 async function loadMoexSharesIndex(){
   const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME');
@@ -676,54 +683,233 @@ async function loadFuturesIndex(){
   const j=await r.json(),c=j.securities.columns,rows=j.securities.data;
   const iS=c.indexOf('SECID'),iN=c.indexOf('SHORTNAME'),iD=c.indexOf('LASTTRADEDATE');
   const today=new Date().toISOString().slice(0,10);
-  return rows.filter(x=>!x[iD]||x[iD]>=today).map(x=>({sym:x[iS],name:x[iN]||x[iS]}));
+  return rows
+    .filter(x=>!x[iD]||x[iD]>=today)
+    .map(x=>({sym:x[iS],name:x[iN]||x[iS]}));
 }
 async function ensureSearchIndex(){
   if(searchIndex)return searchIndex;
   const c=store.get('searchIndex',null);
-  if(c&&c.ts>Date.now()-864e5&&c.data){searchIndex=c.data;return searchIndex}
-  const [crypto,moex,futures]=await Promise.all([loadCryptoIndex().catch(()=>[]),loadMoexSharesIndex().catch(()=>[]),loadFuturesIndex().catch(()=>[])]);
+  if(c&&c.ts>Date.now()-864e5&&c.data){
+    searchIndex=c.data;
+    if(SRC_ORDER.every(s=>(searchIndex[s]||[]).length>0))return searchIndex;
+  }
+  const [crypto,moex,futures]=await Promise.all([
+    loadCryptoIndex().catch(()=>[]),
+    loadMoexSharesIndex().catch(()=>[]),
+    loadFuturesIndex().catch(()=>[])
+  ]);
   searchIndex={crypto,moex,futures};
   try{store.set('searchIndex',{ts:Date.now(),data:searchIndex})}catch(e){}
   return searchIndex;
 }
-function searchSymbols(q){
+
+function searchSymbols(q,srcFilter='all'){
   if(!searchIndex)return[];
-  q=q.trim().toLowerCase();if(!q)return[];
+  q=q.trim().toLowerCase();
+  if(!q)return[];
+  const PER_SRC=25;
   const out=[];
-  const match=(src,arr)=>{for(const it of arr){
-    if(it.sym.toLowerCase().includes(q)||(it.name&&it.name.toLowerCase().includes(q))){
-      out.push({src,sym:it.sym,name:it.name});
-      if(out.length>=60)return true;
-    }}return false;};
-  match('crypto',searchIndex.crypto)||match('moex',searchIndex.moex)||match('futures',searchIndex.futures);
+  const order=srcFilter==='all'?SRC_ORDER:[srcFilter];
+  for(const src of order){
+    const arr=searchIndex[src];
+    if(!arr||!arr.length)continue;
+    let count=0;
+    for(const it of arr){
+      if(it.sym.toLowerCase().includes(q)||(it.name&&it.name.toLowerCase().includes(q))){
+        out.push({src,sym:it.sym,name:it.name});
+        count++;
+        if(count>=PER_SRC)break;
+      }
+    }
+  }
   return out;
 }
-const SRC_LABEL={crypto:'Крипто',moex:'MOEX',futures:'Фьюч'};
-function renderSearchResults(){
-  const list=$('sbList');list.innerHTML='';
-  if(!searchResults.length){list.innerHTML='<div class="sb-empty">'+(searchIndex?'Ничего не найдено':'Загрузка списка…')+'</div>';return}
-  searchResults.forEach((r,idx)=>{
-    const item=document.createElement('div');item.className='sb-item'+(idx===searchActive?' active':'');
-    item.innerHTML=`<span class="sb-badge ${r.src}">${SRC_LABEL[r.src]}</span><span class="sb-sym">${r.sym}</span><span class="sb-name">${r.name||''}</span>`;
-    item.onclick=()=>selectSearchResult(r);
-    list.append(item);
+
+function fmtPrice(n){
+  if(n==null)return '—';
+  const a=Math.abs(n);
+  if(a>=1000)return n.toLocaleString('en-US',{maximumFractionDigits:2});
+  if(a>=100)return n.toFixed(2);
+  if(a>=1)return n.toFixed(3);
+  if(a>=0.01)return n.toFixed(4);
+  return String(+n.toPrecision(4));
+}
+
+function updateQuoteCells(){
+  document.querySelectorAll('#sbList .sb-item').forEach(item=>{
+    const sym=item.dataset.sym,src=item.dataset.src;
+    if(!sym||!src)return;
+    const p=px[src+':'+sym];
+    if(!p||p.last==null)return;
+    const priceEl=item.querySelector('.sb-last');
+    const pctEl=item.querySelector('.sb-pct');
+    if(priceEl){priceEl.textContent=fmtPrice(p.last);priceEl.classList.remove('dim')}
+    if(pctEl&&p.pct!=null){
+      pctEl.textContent=(p.pct>=0?'+':'')+(+p.pct).toFixed(2)+'%';
+      pctEl.classList.remove('up','down');
+      pctEl.classList.add(p.pct>=0?'up':'down');
+    }
   });
 }
-function scrollToActive(){const el=document.querySelector('.sb-item.active');if(el)el.scrollIntoView({block:'nearest'})}
-function selectSearchResult(r){closeSearch();setSrc(r.src);$('sym').value=r.sym;open_()}
+
+let quoteTimer=null;
+function scheduleQuotes(){
+  clearTimeout(quoteTimer);
+  quoteTimer=setTimeout(loadQuotes,350);
+}
+
+async function loadQuotes(){
+  const LIMIT=25;
+  const crypto=[],moex=[],futures=[];
+  searchResults.forEach(r=>{
+    if(r.src==='crypto'&&crypto.length<LIMIT)crypto.push(r.sym);
+    else if(r.src==='moex'&&moex.length<LIMIT)moex.push(r.sym);
+    else if(r.src==='futures'&&futures.length<LIMIT)futures.push(r.sym);
+  });
+  const jobs=[];
+
+  if(crypto.length){
+    jobs.push((async()=>{
+      try{
+        const q=encodeURIComponent(JSON.stringify(crypto));
+        let r;
+        try{r=await fetch('https://data-api.binance.vision/api/v3/ticker/24hr?symbols='+q)}
+        catch(e){r=await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols='+q)}
+        if(!r.ok)return;
+        (await r.json()).forEach(t=>{
+          px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent,vol:+t.quoteVolume};
+        });
+      }catch(e){}
+    })());
+  }
+
+  if(moex.length){
+    jobs.push((async()=>{
+      try{
+        const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+moex.join(','));
+        if(!r.ok)return;
+        (await r.json()).marketdata.data.forEach(x=>{
+          px['moex:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};
+        });
+      }catch(e){}
+    })());
+  }
+
+  if(futures.length){
+    jobs.push((async()=>{
+      try{
+        const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+futures.join(','));
+        if(!r.ok)return;
+        (await r.json()).marketdata.data.forEach(x=>{
+          px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};
+        });
+      }catch(e){}
+    })());
+  }
+
+  await Promise.all(jobs);
+  updateQuoteCells();
+}
+
+function renderSearchResults(){
+  const list=$('sbList');list.innerHTML='';
+  if(!searchResults.length){
+    const q=($('sbInput')?.value||'').trim();
+    const hint=searchIndex
+      ?(q?'Ничего не найдено':'Начните вводить тикер')
+      :'Загрузка списка…';
+    list.innerHTML='<div class="sb-empty">'+hint+'</div>';
+    return;
+  }
+  const counts={};
+  searchResults.forEach(r=>{counts[r.src]=(counts[r.src]||0)+1});
+  const BADGE={crypto:'К',moex:'М',futures:'Ф'};
+  let lastSrc=null;
+  searchResults.forEach((r,idx)=>{
+    if(r.src!==lastSrc){
+      lastSrc=r.src;
+      const head=document.createElement('div');
+      head.className='sb-group-head';
+      head.innerHTML=`<span class="sb-badge ${r.src}">${BADGE[r.src]}</span><span class="sb-group-title">${SRC_LABEL[r.src]}</span><span class="sb-count">${counts[r.src]}</span>`;
+      list.appendChild(head);
+    }
+    const item=document.createElement('div');
+    item.className='sb-item'+(idx===searchActive?' active':'');
+    item.dataset.sym=r.sym;
+    item.dataset.src=r.src;
+    item.innerHTML=`
+      <div class="sb-item-sym">
+        <div class="sb-sym">${r.sym}</div>
+        <div class="sb-name">${r.name||''}</div>
+      </div>
+      <div class="sb-item-price">
+        <div class="sb-last dim">—</div>
+        <div class="sb-pct"></div>
+      </div>`;
+    item.onclick=()=>selectSearchResult(r);
+    list.appendChild(item);
+  });
+  updateQuoteCells();
+}
+
+function scrollToActive(){
+  const el=document.querySelector('.sb-item.active');
+  if(el)el.scrollIntoView({block:'nearest'});
+}
+
+function selectSearchResult(r){
+  closeSearch();
+  setSrc(r.src);
+  $('sym').value=r.sym;
+  open_();
+}
+
 function openSearch(){
   $('searchModal').classList.remove('hidden');
-  $('sbInput').value='';searchActive=-1;searchResults=[];
+  $('sbInput').value='';
+  searchActive=-1;
+  searchResults=[];
+  searchSrcFilter='all';
+  document.querySelectorAll('#sbFilters button').forEach(b=>b.classList.toggle('on',b.dataset.src==='all'));
   $('sbList').innerHTML='<div class="sb-empty">Загрузка списка…</div>';
   setTimeout(()=>$('sbInput').focus(),0);
-  ensureSearchIndex().then(()=>renderSearchResults()).catch(()=>{$('sbList').innerHTML='<div class="sb-empty">Не удалось загрузить</div>'});
+  ensureSearchIndex().then(()=>{
+    const q=$('sbInput').value;
+    if(q.trim()){
+      searchResults=searchSymbols(q,searchSrcFilter);
+      searchActive=searchResults.length?0:-1;
+    }
+    renderSearchResults();
+    if(searchResults.length)scheduleQuotes();
+  }).catch(()=>{$('sbList').innerHTML='<div class="sb-empty">Не удалось загрузить список</div>'});
 }
 function closeSearch(){$('searchModal').classList.add('hidden')}
+
 $('searchBtn').onclick=openSearch;
 $('sbClose').onclick=closeSearch;
 $('searchModal').onclick=e=>{if(e.target===$('searchModal'))closeSearch()};
-$('sbInput').addEventListener('input',e=>{searchResults=searchSymbols(e.target.value);searchActive=searchResults.length?0:-1;renderSearchResults()});
+
+document.querySelectorAll('#sbFilters button').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('#sbFilters button').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    searchSrcFilter=btn.dataset.src;
+    searchResults=searchSymbols($('sbInput').value,searchSrcFilter);
+    searchActive=searchResults.length?0:-1;
+    renderSearchResults();
+    scrollToActive();
+    scheduleQuotes();
+  };
+});
+
+$('sbInput').addEventListener('input',e=>{
+  searchResults=searchSymbols(e.target.value,searchSrcFilter);
+  searchActive=searchResults.length?0:-1;
+  renderSearchResults();
+  scrollToActive();
+  scheduleQuotes();
+});
 $('sbInput').addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();closeSearch();return}
   if(e.key==='ArrowDown'){e.preventDefault();if(searchResults.length){searchActive=Math.min(searchActive+1,searchResults.length-1);renderSearchResults();scrollToActive()}}
@@ -734,7 +920,7 @@ $('sbInput').addEventListener('keydown',e=>{
 /* ============ ЗАГРУЗКА ДАННЫХ ============ */
 async function fetchBars(short){
   if(S.src==='crypto'){
-    const q=`/api/v3/klines?symbol=${S.sym}&interval=${S.tf}&limit=500`;
+    const q=`/api/v3/klines?symbol=${encodeURIComponent(S.sym)}&interval=${encodeURIComponent(S.tf)}&limit=500`;
     let r;try{r=await fetch('https://data-api.binance.vision'+q)}catch(e){r=await fetch('https://api.binance.com'+q)}
     if(!r.ok)throw new Error('Binance: тикер '+S.sym+' не найден');
     return (await r.json()).map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
@@ -747,13 +933,11 @@ async function fetchBars(short){
   const j=await r.json(),c=j.candles.columns,rows=j.candles.data;
   if(!rows.length)throw new Error('Нет данных по '+S.sym);
   const ix=n=>c.indexOf(n);
-  
-  // Фильтруем строки, где close, open, high, low = null
   return rows.map(x=>{
-    const open=x[ix('open')], high=x[ix('high')], low=x[ix('low')], close=x[ix('close')], volume=x[ix('volume')]||0;
-    if(open==null||high==null||low==null||close==null) return null;
+    const open=x[ix('open')],high=x[ix('high')],low=x[ix('low')],close=x[ix('close')],volume=x[ix('volume')]||0;
+    if(open==null||high==null||low==null||close==null)return null;
     return {time:Date.parse(x[ix('begin')].replace(' ','T')+'Z')/1000,open,high,low,close,volume};
-  }).filter(x => x !== null);
+  }).filter(x=>x!==null);
 }
 function err(m){const e=$('err');e.textContent=m;e.style.display=m?'block':'none'}
 function focusToPrice(len){
@@ -781,13 +965,23 @@ const IV={
   moex:{1:60,10:600,60:3600,24:86400,7:604800,31:2592000,4:7776000},
   futures:{1:60,10:600,60:3600,24:86400,7:604800,31:2592000,4:7776000}
 };
+function tfSeconds(src,tf){
+  if(IV[src]&&IV[src][tf]!=null)return IV[src][tf];
+  if(src==='crypto'){
+    const m=String(tf).match(/^(\d+)([smhdwM])$/);
+    if(!m)return null;
+    const unit={s:1,m:60,h:3600,d:86400,w:604800,M:2592000}[m[2]];
+    return unit?+m[1]*unit:null;
+  }
+  return null;
+}
 const p2=n=>String(n).padStart(2,'0');
 const fmtT=s=>{const d=new Date(s*1000);return p2(d.getUTCDate())+'.'+p2(d.getUTCMonth()+1)+' '+p2(d.getUTCHours())+':'+p2(d.getUTCMinutes())};
 function tickCd(){
   const e=$('cdTag'),b=S.data[S.data.length-1];
   const needHide=(S.src!=='crypto'&&+S.tf>=24)||(S.src==='crypto'&&(S.tf==='1w'||S.tf==='1M'));
   if(!b||!main||needHide){e.style.display='none';return}
-  const iv=IV[S.src][S.tf];if(!iv){e.style.display='none';return}
+  const iv=tfSeconds(S.src,S.tf);if(!iv){e.style.display='none';return}
   const real=S.src==='crypto'?b.time:b.time-10800;
   const r=real+iv-Math.floor(Date.now()/1000);
   const y=main.priceToCoordinate(b.close);
@@ -798,11 +992,19 @@ function tickCd(){
 }
 setInterval(tickCd,250);
 
+function tfLabel(src,tf){
+  const t=getTF(src);
+  for(const [k,v] of Object.entries(t)){
+    if(String(v)===String(tf))return k;
+  }
+  return String(tf);
+}
+
 function legend(b,p){
   if(!b)return;
   const ref=p?p.close:b.open,ch=b.close-ref,pc=ch/ref*100,col=ch>=0?'var(--up)':'var(--down)';
   const f=n=>n>=100?n.toFixed(2):n.toPrecision(5).replace(/\.?0+$/,'');
-  $('legend').innerHTML=`<b>${S.sym}</b> <span style="color:var(--dim)">${S.tf}</span><br>О ${f(b.open)} В ${f(b.high)} Н ${f(b.low)} З <span style="color:${col}">${f(b.close)} (${ch>=0?'+':''}${pc.toFixed(2)}%)</span>`;
+  $('legend').innerHTML=`<b>${S.sym}</b> <span style="color:var(--dim)">${tfLabel(S.src,S.tf)}</span><br>О ${f(b.open)} В ${f(b.high)} Н ${f(b.low)} З <span style="color:${col}">${f(b.close)} (${ch>=0?'+':''}${pc.toFixed(2)}%)</span>`;
 }
 chart.subscribeCrosshairMove(p=>{
   if(!p.time||!S.data.length)return;
@@ -812,24 +1014,20 @@ chart.subscribeCrosshairMove(p=>{
 
 /* ============ REAL-TIME ============ */
 let ws=null,wsTry=0,poll=null,liveId=0;
-function setStatus(t,on){const e=$('status');e.textContent='● '+t;e.style.color=on?'var(--up)':'var(--dim)'}
+function setStatus(t,on){
+  const e=$('status');
+  e.innerHTML='<span class="status-dot"></span> '+t;
+  e.style.color=on?'var(--up)':'var(--dim)';
+  const dot=e.querySelector('.status-dot');
+  if(dot)dot.style.background=on?'var(--up)':'var(--dim)';
+}
 function applyBar(b){
   const L=S.data[S.data.length-1];
   if(L&&b.time<L.time)return;
   if(L&&b.time===L.time)S.data[S.data.length-1]=b;else S.data.push(b);
   if(main)main.update(val(b));
   if(vol)vol.update({time:b.time,value:b.volume,color:b.close>=b.open?C.up+'55':C.down+'55'});
-  
-  // Обновляем индикаторы на лету
-  indicators.forEach(ind=>{
-    if(ind.id==='sma20'||ind.id==='ema50'||ind.id==='sma200'){
-       const d=S.data;
-       if(ind.id==='sma20') { const a=calcSMA(d,20); if(a.length) ind.series[0].update(a[a.length-1]); }
-       if(ind.id==='ema50') { const a=calcEMA(d,50); if(a.length) ind.series[0].update(a[a.length-1]); }
-       if(ind.id==='sma200'){ const a=calcSMA(d,200); if(a.length) ind.series[0].update(a[a.length-1]); }
-    }
-  });
-
+  indicators.forEach(ind=>updateIndicator(ind));
   legend(S.data[S.data.length-1],S.data[S.data.length-2]);
   checkAlerts(S.sym,b.close);
 }
@@ -845,7 +1043,7 @@ function openWs(id){
   const hosts=['wss://stream.binance.com:9443','wss://data-stream.binance.vision'];
   setStatus('подключение…',false);
   ws=new WebSocket(`${hosts[wsTry%2]}/ws/${S.sym.toLowerCase()}@kline_${S.tf}`);
-  ws.onopen=()=>{const re=wsTry>0;wsTry=0;setStatus('live',true);if(re)load(false)};
+  ws.onopen=()=>{if(id!==liveId)return;const re=wsTry>0;wsTry=0;setStatus('live',true);if(re)load(false)};
   ws.onmessage=m=>{if(id!==liveId)return;const k=JSON.parse(m.data).k;if(!k)return;applyBar({time:Math.floor(k.t/1000),open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v})};
   ws.onclose=()=>{if(id!==liveId)return;wsTry++;setStatus('переподключение…',false);setTimeout(()=>{if(id===liveId)openWs(id)},Math.min(1000*wsTry,5000))};
 }
@@ -861,6 +1059,7 @@ function getTF(src){
 }
 function buildTf(){
   const t=getTF(S.src);
+  $('addTf').style.display=S.src==='crypto'?'':'none';
   const vals=Object.values(t);
   if(!vals.some(v=>String(v)===String(S.tf)))S.tf=TF_DEFAULT[S.src];
   $('tfs').innerHTML='';
@@ -878,25 +1077,43 @@ function buildTf(){
     $('tfs').append(del);
   });
 }
+
+const BINANCE_TF=new Set(['1s','1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']);
+const MOEX_TF_MAP={'1м':1,'10м':10,'1ч':60,'1д':24,'1н':7,'1мес':31,'1кв':4};
+
 $('addTf').onclick=()=>{
-  const raw=prompt('Свой интервал (например, 3ч, 45м, 2д). Допустимо: с/м/ч/д/н');
+  const raw=prompt('Свой интервал (например: 3ч, 45м, 2д, 5м).\nЕдиницы: с/s — сек, м/m — мин, ч/h — час, д/d — день, н/w — неделя');
   if(!raw)return;
-  const m=raw.trim().toLowerCase().match(/^(\d+)([смчдн])$/);
-  if(!m){flash('Неверный формат. Например: 3ч');return}
-  const val=+m[1];const unit=m[2];
-  const label=val+unit;
+  const m=raw.trim().match(/^(\d+)\s*([смчднsmhdw])$/i);
+  if(!m){flash('Неверный формат. Например: 3ч или 3h');return}
+  const n=+m[1];
+  const LAT_TO_CYR={s:'с',m:'м',h:'ч',d:'д',w:'н'};
+  const unit=LAT_TO_CYR[m[2].toLowerCase()]||m[2].toLowerCase();
+  const key=n+unit;
   let tfValue;
+
   if(S.src==='crypto'){
     const map={'с':'s','м':'m','ч':'h','д':'d','н':'w'};
-    tfValue=val+map[unit];
+    tfValue=n+map[unit];
+    if(!BINANCE_TF.has(tfValue)){
+      flash('Binance: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M');
+      return;
+    }
   }else{
-    const mins={'м':1,'ч':60,'д':1440,'н':10080}[unit]*val;
-    const allowed=[1,10,60,24,7,31,4];
-    if(!allowed.includes(mins)){flash('MOEX поддерживает только 1м, 10м, 1ч, 1д, 1н, 1мес, 1кв');return}
-    tfValue=mins;
+    if(!(key in MOEX_TF_MAP)){
+      flash('MOEX: только 1м, 10м, 1ч, 1д, 1н, 1мес, 1кв');
+      return;
+    }
+    tfValue=MOEX_TF_MAP[key];
   }
+
+  if(Object.values(getTF(S.src)).some(v=>String(v)===String(tfValue))){
+    flash('Такой интервал уже есть');
+    return;
+  }
+
   if(!S.tfCustom[S.src])S.tfCustom[S.src]={};
-  S.tfCustom[S.src][label]=tfValue;
+  S.tfCustom[S.src][key]=tfValue;
   store.set('tfCustom',S.tfCustom);
   S.tf=tfValue;
   buildTf();load(true);
@@ -916,7 +1133,8 @@ $('srcF').onclick=()=>{setSrc('futures');$('sym').value='SiZ6';open_()};
 function open_(){
   if(mq.matches)view('chart');
   saveDrawings();
-  S.sym=$('sym').value.trim().toUpperCase()||S.sym;
+  const raw=$('sym').value.trim();
+  S.sym=raw?(S.src==='crypto'?raw.toUpperCase():raw):S.sym;
   buildTf();
   createSeries();
   load(true);
@@ -932,8 +1150,24 @@ let wl=store.get('wl',[
   {src:'moex',sym:'SBER'},{src:'moex',sym:'GAZP'}
 ]);
 const mq=matchMedia('(max-width:700px)');
-function view(v){document.body.classList.toggle('m-chart',v==='chart');document.body.classList.toggle('m-list',v!=='chart');
-  if(v==='chart'){try{history.pushState({c:1},'')}catch(e){}}}
+
+mq.addEventListener('change',()=>{
+  if(!mq.matches){
+    document.body.classList.remove('m-chart','m-list');
+    focusToPrice(S.data.length);
+  } else if(!document.body.classList.contains('m-chart')){
+    view('list');
+  }
+});
+
+function view(v){
+  const wasChart=document.body.classList.contains('m-chart');
+  document.body.classList.toggle('m-chart',v==='chart');
+  document.body.classList.toggle('m-list',v!=='chart');
+  if(v==='chart'&&mq.matches&&!wasChart){
+    try{history.pushState({c:1},'')}catch(e){}
+  }
+}
 function goList(){
   liveId++;if(ws){ws.onclose=null;ws.close();ws=null}clearInterval(poll);
   view('list');loadPrices();
@@ -944,6 +1178,8 @@ addEventListener('popstate',()=>{if(mq.matches&&document.body.classList.contains
 const px={};
 const fmtP=n=>n==null?'':n>=100?n.toFixed(2):String(+n.toPrecision(5));
 function renderWl(){
+  const wc=$('watchCount');
+  if(wc)wc.textContent=wl.length;
   $('wl').innerHTML='';
   wl.forEach((w,i)=>{
     const d=document.createElement('div');d.className='wl';
@@ -951,8 +1187,12 @@ function renderWl(){
     b.onclick=()=>{setSrc(w.src);$('sym').value=w.sym;open_()};
     const p=px[w.src+':'+w.sym],pr=document.createElement('span');pr.className='pr';
     if(p&&p.last!=null){
-      const c=p.pct>=0?'var(--up)':'var(--down)';
-      pr.innerHTML=fmtP(p.last)+'<br><span style="color:'+c+'">'+(p.pct>=0?'+':'')+(+p.pct||0).toFixed(2)+'%</span>';
+      if(p.pct!=null){
+        const c=p.pct>=0?'var(--up)':'var(--down)';
+        pr.innerHTML=fmtP(p.last)+'<br><span style="color:'+c+'">'+(p.pct>=0?'+':'')+(+p.pct).toFixed(2)+'%</span>';
+      }else{
+        pr.textContent=fmtP(p.last);
+      }
     }
     const x=document.createElement('button');x.className='x';x.textContent='×';
     x.onclick=()=>{wl.splice(i,1);store.set('wl',wl);renderWl();renderScreener()};
@@ -985,11 +1225,35 @@ async function loadPrices(){
       if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]}});
     }catch(e){}
   }
+  wl.forEach(w=>{
+    const p=px[w.src+':'+w.sym];
+    if(p&&p.last!=null)checkAlerts(w.sym,p.last);
+  });
   renderWl();
 }
+function detectSrc(sym){
+  if(!sym)return S.src;
+  const u=sym.toUpperCase();
+  if(/(USDT|USDC|BUSD|BTC|ETH|BNB)$/.test(u)&&u.length>4)return 'crypto';
+  if(/^[A-Z]{2,4}[FGHJKMNQUVXZ]\d$/.test(u))return 'futures';
+  if(searchIndex){
+    if(searchIndex.crypto?.some(it=>it.sym===u))return 'crypto';
+    if(searchIndex.moex?.some(it=>it.sym===u))return 'moex';
+    if(searchIndex.futures?.some(it=>it.sym===u))return 'futures';
+  }
+  return S.src;
+}
 $('add').onclick=()=>{
-  const s=($('sym').value.trim().toUpperCase())||S.sym;
-  if(!wl.some(w=>w.sym===s&&w.src===S.src)){wl.push({src:S.src,sym:s});store.set('wl',wl);renderWl();loadPrices()}
+  const s=($('sym').value.trim())||S.sym;
+  if(!s)return;
+  const src=detectSrc(s);
+  const sym=src==='crypto'?s.toUpperCase():s;
+  if(!wl.some(w=>w.sym===sym&&w.src===src)){
+    wl.push({src,sym});
+    store.set('wl',wl);
+    renderWl();
+    loadPrices();
+  }
 };
 function save(){store.set('last',{src:S.src,sym:S.sym,tf:S.tf})}
 

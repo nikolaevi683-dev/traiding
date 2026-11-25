@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Графики</title>
+<title>ATLAS — Trading Terminal</title>
 <script type="importmap">
 {
   "imports": {
@@ -15,33 +15,55 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">A</span>
+    <span class="brand-name">ATLAS</span>
+    <span class="brand-divider"></span>
+    <span class="brand-caption">MARKETS</span>
+  </div>
+
   <button id="back">‹ Список</button>
+
   <div class="grp" id="srcG">
     <button id="srcB" class="on">Крипто</button>
     <button id="srcM">MOEX</button>
     <button id="srcF">Фьючерсы</button>
   </div>
-  <button id="searchBtn" title="Поиск тикера (Ctrl+K)">🔍</button>
+
+  <button id="searchBtn" title="Поиск тикера (Ctrl+K)">⌕</button>
   <input id="sym" type="text" value="BTCUSDT" aria-label="Тикер">
   <button id="go">Открыть</button>
-  <button id="indBtn" title="Индикаторы (/)">📊 Индикаторы</button>
-  <button id="settingsBtn" title="Настройки графика">⚙</button>
-  <span id="status"></span>
+  <button id="indBtn" title="Индикаторы (/)">Индикаторы</button>
+  <button id="settingsBtn" title="Настройки графика">Настройки</button>
+
+  <span id="status">
+    <span class="status-dot"></span>
+    Подключение
+  </span>
 </header>
 
 <main>
   <aside id="drawing-toolbar"></aside>
+
   <div id="wrap">
     <div id="legend"></div>
     <div id="chart"></div>
     <div id="cdTag"></div>
     <div id="err"></div>
   </div>
+
   <aside id="side">
-    <h4>Список</h4>
-    <div id="wl"></div>
-    <button id="add">+ Добавить из поля</button>
+    <div class="side-card">
+      <div class="side-card-head">
+        <h4>РЫНОК</h4>
+        <span class="section-count" id="watchCount"></span>
+      </div>
+
+      <div id="wl"></div>
+
+      <button id="add">＋ Добавить инструмент</button>
+    </div>
   </aside>
 </main>
 
@@ -51,6 +73,7 @@
     <button data-tab="alerts">Алерты</button>
     <button id="bottomToggle" title="Свернуть/развернуть">▾</button>
   </div>
+
   <div class="bottom-body">
     <div id="screenerTab" class="bottom-pane on">
       <div class="screener-wrap">
@@ -64,17 +87,21 @@
         <div id="screenerBody" class="screener-body"></div>
       </div>
     </div>
+
     <div id="alertsTab" class="bottom-pane">
       <div class="alerts-wrap">
         <div class="alerts-toolbar">
           <input id="alertSym" type="text" placeholder="Тикер (BTCUSDT)">
+
           <select id="alertCond">
             <option value="gt">Цена выше</option>
             <option value="lt">Цена ниже</option>
           </select>
+
           <input id="alertPrice" type="text" placeholder="Цена">
           <button id="alertAdd">Добавить алерт</button>
         </div>
+
         <div id="alertsList" class="alerts-list"></div>
       </div>
     </div>
@@ -83,24 +110,36 @@
 
 <!-- Настройки графика -->
 <div id="settingsPanel" class="hidden" aria-hidden="true">
-  <div class="tp-head"><b>Настройки графика</b><button id="settingsClose">×</button></div>
+  <div class="tp-head">
+    <b>Настройки графика</b>
+    <button id="settingsClose">×</button>
+  </div>
+
   <div class="tp-body">
     <div class="tp-sec">
       <div class="tp-title">Таймфрейм</div>
       <div class="grp tfs-group" id="tfs"></div>
-      <button id="addTf" class="tp-reset" style="margin-top:6px">+ Свой интервал</button>
+      <button id="addTf" class="tp-reset" style="margin-top:6px">
+        + Свой интервал
+      </button>
     </div>
+
     <div class="tp-sec">
       <div class="tp-title">Отображение</div>
-      <label class="tp-row"><span>Стиль графика</span>
+
+      <label class="tp-row">
+        <span>Стиль графика</span>
         <select id="style" class="tp-select">
-          <option value="c">Свечи</option><option value="l">Линия</option>
+          <option value="c">Свечи</option>
+          <option value="l">Линия</option>
         </select>
       </label>
     </div>
-    <button id="openTheme" class="tp-reset">🎨 Оформление</button>
+
+    <button id="openTheme" class="tp-reset">Оформление</button>
   </div>
 </div>
+
 <div id="settingsOverlay" class="hidden"></div>
 
 <!-- Индикаторы -->
@@ -110,9 +149,16 @@
       <b>Индикаторы</b>
       <button id="indClose">×</button>
     </div>
+
     <div class="ind-search-wrap">
-      <input id="indSearch" type="text" placeholder="Поиск индикатора…" autocomplete="off">
+      <input
+        id="indSearch"
+        type="text"
+        placeholder="Поиск индикатора…"
+        autocomplete="off"
+      >
     </div>
+
     <div id="indList" class="ind-list"></div>
   </div>
 </div>
@@ -121,31 +167,70 @@
 <div id="searchModal" class="hidden" role="dialog" aria-label="Поиск тикера">
   <div id="searchBox">
     <div class="sb-input">
-      <span class="icon">🔍</span>
-      <input id="sbInput" type="text" placeholder="Тикер или название…" autocomplete="off" spellcheck="false">
+      <span class="icon">⌕</span>
+
+      <input
+        id="sbInput"
+        type="text"
+        placeholder="Тикер или название…"
+        autocomplete="off"
+        spellcheck="false"
+      >
+
       <button id="sbClose">×</button>
     </div>
+
+    <div class="sb-filters" id="sbFilters">
+      <button data-src="all" class="on">Все</button>
+      <button data-src="crypto">Крипто</button>
+      <button data-src="moex">MOEX</button>
+      <button data-src="futures">Фьючерсы</button>
+    </div>
+
     <div class="sb-list" id="sbList"></div>
-    <div class="sb-footer"><span>↑↓ выбор</span><span>Enter открыть</span><span>Esc закрыть</span></div>
+
+    <div class="sb-footer">
+      <span>↑↓ выбор</span>
+      <span>Enter открыть</span>
+      <span>Esc закрыть</span>
+    </div>
   </div>
 </div>
 
 <!-- Оформление -->
 <div id="themePanel" class="hidden" aria-hidden="true">
-  <div class="tp-head"><b>Оформление</b><button id="themeClose">×</button></div>
+  <div class="tp-head">
+    <b>Оформление</b>
+    <button id="themeClose">×</button>
+  </div>
+
   <div class="tp-body">
-    <div class="tp-sec"><div class="tp-title">Встроенные пресеты</div><div class="tp-presets" id="presetBuiltin"></div></div>
+    <div class="tp-sec">
+      <div class="tp-title">Встроенные пресеты</div>
+      <div class="tp-presets" id="presetBuiltin"></div>
+    </div>
+
     <div class="tp-sec">
       <div class="tp-title">Мои пресеты</div>
+
       <div class="tp-save-row">
-        <input id="presetName" type="text" placeholder="Название пресета" maxlength="40">
+        <input
+          id="presetName"
+          type="text"
+          placeholder="Название пресета"
+          maxlength="40"
+        >
         <button id="presetSave">Сохранить</button>
       </div>
+
       <div id="presetCustom"></div>
     </div>
+
     <div class="tp-sec">
       <div class="tp-title">Фон приложения</div>
-      <label class="tp-row"><span>Тип фона</span>
+
+      <label class="tp-row">
+        <span>Тип фона</span>
         <select id="bgType" class="tp-select">
           <option value="solid">Сплошной</option>
           <option value="gradient">Градиент</option>
@@ -154,33 +239,94 @@
           <option value="grid">Сетка</option>
         </select>
       </label>
-      <label class="tp-row"><span>Цвет 1</span><input type="color" data-k="appbg"></label>
-      <label class="tp-row"><span>Цвет 2</span><input type="color" data-k="appbg2"></label>
-      <label class="tp-row"><span>Угол</span><input type="range" id="bgAngle" min="0" max="360" step="5"></label>
+
+      <label class="tp-row">
+        <span>Цвет 1</span>
+        <input type="color" data-k="appbg">
+      </label>
+
+      <label class="tp-row">
+        <span>Цвет 2</span>
+        <input type="color" data-k="appbg2">
+      </label>
+
+      <label class="tp-row">
+        <span>Угол</span>
+        <input type="range" id="bgAngle" min="0" max="360" step="5">
+      </label>
     </div>
+
     <div class="tp-sec">
       <div class="tp-title">Панели и текст</div>
-      <label class="tp-row"><span>Панели</span><input type="color" data-k="panel"></label>
-      <label class="tp-row"><span>Текст интерфейса</span><input type="color" data-k="utext"></label>
-      <label class="tp-row"><span>Вторичный текст</span><input type="color" data-k="dimtext"></label>
-      <label class="tp-row"><span>Границы</span><input type="color" data-k="border"></label>
-      <label class="tp-row"><span>Акцент</span><input type="color" data-k="acc"></label>
+
+      <label class="tp-row">
+        <span>Панели</span>
+        <input type="color" data-k="panel">
+      </label>
+
+      <label class="tp-row">
+        <span>Текст интерфейса</span>
+        <input type="color" data-k="utext">
+      </label>
+
+      <label class="tp-row">
+        <span>Вторичный текст</span>
+        <input type="color" data-k="dimtext">
+      </label>
+
+      <label class="tp-row">
+        <span>Границы</span>
+        <input type="color" data-k="border">
+      </label>
+
+      <label class="tp-row">
+        <span>Акцент</span>
+        <input type="color" data-k="acc">
+      </label>
     </div>
+
     <div class="tp-sec">
       <div class="tp-title">Цвета движения</div>
-      <label class="tp-row"><span>Рост</span><input type="color" data-k="up"></label>
-      <label class="tp-row"><span>Падение</span><input type="color" data-k="down"></label>
+
+      <label class="tp-row">
+        <span>Рост</span>
+        <input type="color" data-k="up">
+      </label>
+
+      <label class="tp-row">
+        <span>Падение</span>
+        <input type="color" data-k="down">
+      </label>
     </div>
+
     <div class="tp-sec">
       <div class="tp-title">Фон графика</div>
-      <label class="tp-row"><span>Фон</span><input type="color" data-k="chartBg"></label>
-      <label class="tp-row"><span>Сетка</span><input type="color" data-k="chartGrid"></label>
-      <label class="tp-row"><span>Текст осей</span><input type="color" data-k="chartText"></label>
-      <label class="tp-row"><span>Границы</span><input type="color" data-k="chartBorder"></label>
+
+      <label class="tp-row">
+        <span>Фон</span>
+        <input type="color" data-k="chartBg">
+      </label>
+
+      <label class="tp-row">
+        <span>Сетка</span>
+        <input type="color" data-k="chartGrid">
+      </label>
+
+      <label class="tp-row">
+        <span>Текст осей</span>
+        <input type="color" data-k="chartText">
+      </label>
+
+      <label class="tp-row">
+        <span>Границы</span>
+        <input type="color" data-k="chartBorder">
+      </label>
     </div>
+
     <button id="themeReset" class="tp-reset">Сбросить к тёмной</button>
   </div>
 </div>
+
 <div id="themeOverlay" class="hidden"></div>
 
 <!-- Контекстное меню -->
