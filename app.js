@@ -45,23 +45,18 @@ function createSeries(){
   if(drawingManager){try{drawingManager.destroy()}catch(e){}drawingManager=null}
   if(main){try{chart.removeSeries(main)}catch(e){}main=null}
   if(vol){try{chart.removeSeries(vol)}catch(e){}vol=null}
-
   indicators.forEach(ind=>{
     ind.series.forEach(s=>{try{chart.removeSeries(s)}catch(e){}});
     if(ind.pane){try{chart.removePane(ind.pane)}catch(e){}}
   });
   indicators=[];
-
   main=$('style').value==='c'
     ?chart.addSeries(CandlestickSeries,{upColor:C.up,downColor:C.down,borderVisible:false,wickUpColor:C.up,wickDownColor:C.down,priceScaleId:'right'})
     :chart.addSeries(LineSeries,{color:C.line,lineWidth:2,priceScaleId:'right'});
-
   vol=chart.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'v'});
   chart.priceScale('v').applyOptions({scaleMargins:{top:.8,bottom:0}});
-
   drawingManager=new DrawingManager(chart,main,{magnet:magnetEnabled?'weak':'off'});
   loadDrawings();
-
   activeIndicators.forEach(key=>{try{addIndicatorById(key,true)}catch(e){}});
 }
 
@@ -156,15 +151,10 @@ function addIndicatorById(id,silent){
     ind.series.push(chart.addSeries(HistogramSeries,{color:'#6aa5e8',priceLineVisible:false,lastValueVisible:false,title:'MACD hist',priceScaleId:'right'},pane));
     ind.series.push(chart.addSeries(LineSeries,{color:'#e0b04a',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'MACD',priceScaleId:'right'},pane));
     ind.series.push(chart.addSeries(LineSeries,{color:'#e5604d',lineWidth:1,priceLineVisible:false,lastValueVisible:false,title:'Signal',priceScaleId:'right'},pane));
-  }else if(id==='volume'){
-    return;
-  }
+  }else if(id==='volume'){return;}
   indicators.push(ind);
   updateIndicator(ind);
-  if(!silent){
-    activeIndicators=[...new Set([...activeIndicators,id])];
-    store.set('activeIndicators',activeIndicators);
-  }
+  if(!silent){activeIndicators=[...new Set([...activeIndicators,id])];store.set('activeIndicators',activeIndicators);}
   renderIndicatorList();
 }
 
@@ -222,20 +212,16 @@ function renderIndicatorList(filter=''){
     name.className='ind-name';name.textContent=it.name;
     const cat=document.createElement('span');cat.className='ind-cat';cat.textContent=it.cat;
     row.append(star,name,cat);
-    row.onclick=()=>{
-      if(indicators.find(i=>i.id===it.id)) removeIndicator(it.id);
-      else addIndicatorById(it.id);
-    };
+    row.onclick=()=>{if(indicators.find(i=>i.id===it.id))removeIndicator(it.id);else addIndicatorById(it.id);};
     list.append(row);
   });
 }
 function toggleFav(id){
-  if(favoriteInds.includes(id)) favoriteInds=favoriteInds.filter(i=>i!==id);
+  if(favoriteInds.includes(id))favoriteInds=favoriteInds.filter(i=>i!==id);
   else favoriteInds.push(id);
   store.set('favoriteInds',favoriteInds);
   renderIndicatorList($('indSearch').value);
 }
-
 function openIndicators(){$('indicatorsModal').classList.remove('hidden');$('indSearch').value='';renderIndicatorList();setTimeout(()=>$('indSearch').focus(),0)}
 function closeIndicators(){$('indicatorsModal').classList.add('hidden')}
 $('indBtn').onclick=openIndicators;
@@ -336,16 +322,10 @@ $('themeReset').onclick=()=>{C={...DEFAULTS};applyColors();syncInputs()};
 
 /* ============ РИСОВАНИЕ ============ */
 const drawingsKey=()=>'drawings:'+S.src+':'+S.sym;
-function saveDrawings(){
-  if(!drawingManager)return;
-  try{store.set(drawingsKey(),drawingManager.exportJSON())}catch(e){}
-}
+function saveDrawings(){if(!drawingManager)return;try{store.set(drawingsKey(),drawingManager.exportJSON())}catch(e){}}
 let saveTimer=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDrawings,400)}
-function loadDrawings(){
-  if(!drawingManager)return;
-  try{const j=store.get(drawingsKey(),null);if(j)drawingManager.importJSON(j)}catch(e){}
-}
+function loadDrawings(){if(!drawingManager)return;try{const j=store.get(drawingsKey(),null);if(j)drawingManager.importJSON(j)}catch(e){}}
 function tryDeleteSelected(){
   if(!drawingManager)return false;
   const ms=['removeSelectedDrawings','removeSelectedDrawing','removeSelected','deleteSelectedDrawing','deleteSelected','removeDrawing','deleteDrawing'];
@@ -358,7 +338,6 @@ function tryClearAll(){
   for(const m of ms){if(typeof drawingManager[m]==='function'){try{if(m==='importJSON')drawingManager[m]('[]');else drawingManager[m]();return true}catch(e){}}}
   return false;
 }
-
 function deleteAtEvent(ev){
   if(!drawingManager)return;
   const rect=chart.chartElement().getBoundingClientRect();
@@ -383,7 +362,6 @@ function deleteAtEvent(ev){
 chart.chartElement().addEventListener('mousedown',ev=>{
   if(ev.button===1){ev.preventDefault();ev.stopPropagation();deleteAtEvent(ev)}
 },{capture:true});
-
 ['mouseup','touchend'].forEach(evt=>{
   chart.chartElement().addEventListener(evt,()=>{if(drawingManager)scheduleSave()},{passive:true});
 });
@@ -439,7 +417,6 @@ function setupToolbar(){
   cursorBtn.className='cursor-btn active';cursorBtn.innerHTML='✛';cursorBtn.title='Курсор (Esc)';
   cursorBtn.onclick=()=>{activateTool('cross');setActive(cursorBtn)};
   tb.appendChild(cursorBtn);
-
   const magnetBtn=document.createElement('button');
   magnetBtn.className='magnet-btn';magnetBtn.innerHTML=magnetEnabled?'⌁':'○';
   magnetBtn.title='Магнит';
@@ -451,7 +428,6 @@ function setupToolbar(){
   };
   if(magnetEnabled)magnetBtn.classList.add('active');
   tb.appendChild(magnetBtn);
-
   toolGroups.forEach(group=>{
     const g=document.createElement('div');g.className='drawing-group';
     const btn=document.createElement('button');btn.innerHTML=group.icon;btn.title=group.title;
@@ -465,7 +441,6 @@ function setupToolbar(){
     });
     g.append(btn,menu);tb.appendChild(g);
   });
-
   const clearBtn=document.createElement('button');
   clearBtn.className='clear-btn';clearBtn.innerHTML='×';clearBtn.title='Удалить все рисунки';
   clearBtn.onclick=()=>{
@@ -482,8 +457,8 @@ function setActive(btn){
 function activateTool(kind,btn){
   if(!drawingManager)return;
   try{drawingManager.setTool(kind)}catch(e){console.warn('Tool not supported:',kind);try{drawingManager.setTool('cross')}catch(_){}}
-  if(btn) setActive(btn);
-  else if(kind==='cross') setActive(document.querySelector('.cursor-btn'));
+  if(btn)setActive(btn);
+  else if(kind==='cross')setActive(document.querySelector('.cursor-btn'));
   else document.querySelectorAll('#drawing-toolbar button').forEach(b=>b.classList.remove('active'));
 }
 
@@ -519,9 +494,7 @@ function showCtx(x,y){
 }
 function hideCtx(){ctxMenu.classList.add('hidden')}
 document.addEventListener('contextmenu',e=>{
-  if(e.target.closest('#chart')||e.target.closest('#wrap')){
-    e.preventDefault();showCtx(e.clientX,e.clientY);
-  }
+  if(e.target.closest('#chart')||e.target.closest('#wrap')){e.preventDefault();showCtx(e.clientX,e.clientY);}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('#ctxMenu'))hideCtx()});
 
@@ -530,38 +503,18 @@ document.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toUpperCase();
   const inInput=tag==='INPUT'||tag==='TEXTAREA'||e.target.isContentEditable;
   if(inInput)return;
-
   const ctrl=e.ctrlKey||e.metaKey;
   if(ctrl&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();return}
   if(e.key==='/'){e.preventDefault();openIndicators();return}
   if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='a'){e.preventDefault();$('bottom').classList.toggle('collapsed');return}
-  if(ctrl&&e.altKey&&e.key.toLowerCase()==='h'){
-    e.preventDefault();document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');return;
-  }
-  if(ctrl&&e.key.toLowerCase()==='s'){
-    e.preventDefault();saveDrawings();save();flash('Сохранено');return;
-  }
-  if(e.key==='Delete'||e.key==='Backspace'){
-    e.preventDefault();
-    if(tryDeleteSelected()){scheduleSave();flash('Фигура удалена')}
-    return;
-  }
-  if(e.key==='Escape'){
-    activateTool('cross',document.querySelector('.cursor-btn'));
-    hideCtx();closeSearch();closeIndicators();return;
-  }
-  if(ctrl&&e.key.toLowerCase()==='z'){
-    if(typeof drawingManager?.undo==='function'){e.preventDefault();drawingManager.undo();scheduleSave()}
-    return;
-  }
-  if(ctrl&&e.key.toLowerCase()==='y'){
-    if(typeof drawingManager?.redo==='function'){e.preventDefault();drawingManager.redo();scheduleSave()}
-    return;
-  }
+  if(ctrl&&e.altKey&&e.key.toLowerCase()==='h'){e.preventDefault();document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');return}
+  if(ctrl&&e.key.toLowerCase()==='s'){e.preventDefault();saveDrawings();save();flash('Сохранено');return}
+  if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();if(tryDeleteSelected()){scheduleSave();flash('Фигура удалена')}return}
+  if(e.key==='Escape'){activateTool('cross',document.querySelector('.cursor-btn'));hideCtx();closeSearch();closeIndicators();return}
+  if(ctrl&&e.key.toLowerCase()==='z'){if(typeof drawingManager?.undo==='function'){e.preventDefault();drawingManager.undo();scheduleSave()}return}
+  if(ctrl&&e.key.toLowerCase()==='y'){if(typeof drawingManager?.redo==='function'){e.preventDefault();drawingManager.redo();scheduleSave()}return}
   const map={'t':'trend-line','h':'horizontal-line','v':'vertical-line','r':'rectangle','f':'fib-retracement'};
-  if(map[e.key.toLowerCase()]&&!ctrl&&!e.altKey){
-    e.preventDefault();activateTool(map[e.key.toLowerCase()]);
-  }
+  if(map[e.key.toLowerCase()]&&!ctrl&&!e.altKey){e.preventDefault();activateTool(map[e.key.toLowerCase()]);}
 });
 
 /* ============ ТОСТ ============ */
@@ -611,7 +564,6 @@ function fmtVol(v){
 
 /* ============ АЛЕРТЫ ============ */
 let alerts=store.get('alerts',[]);
-
 function renderAlerts(){
   const list=$('alertsList');list.innerHTML='';
   if(!alerts.length){list.innerHTML='<div class="sb-empty">Нет алертов</div>';return}
@@ -653,17 +605,24 @@ function checkAlerts(sym,price){
   });
   if(changed){store.set('alerts',alerts);renderAlerts()}
 }
-if('Notification' in window&&Notification.permission==='default'){
-  Notification.requestPermission();
-}
+if('Notification' in window&&Notification.permission==='default'){Notification.requestPermission();}
 
 /* ============ ПОИСК ============ */
 let searchIndex=null,searchResults=[],searchActive=-1,searchSrcFilter='all';
 const SRC_LABEL={crypto:'Крипто',moex:'MOEX',futures:'Фьючерсы'};
 const SRC_ORDER=['crypto','moex','futures'];
 
+/* fetch с таймаутом — спасает от вечной загрузки на iOS Safari */
+function fetchTO(url,ms=8000){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),ms);
+  return fetch(url,{signal:ctrl.signal}).finally(()=>clearTimeout(t));
+}
+
 async function loadCryptoIndex(){
-  let r;try{r=await fetch('https://data-api.binance.vision/api/v3/exchangeInfo')}catch(e){r=await fetch('https://api.binance.com/api/v3/exchangeInfo')}
+  let r;
+  try{r=await fetchTO('https://data-api.binance.vision/api/v3/exchangeInfo',6000)}
+  catch(e){r=await fetchTO('https://api.binance.com/api/v3/exchangeInfo',6000)}
   if(!r.ok)throw new Error('binance');
   const j=await r.json();
   return j.symbols
@@ -671,36 +630,52 @@ async function loadCryptoIndex(){
     .map(s=>({sym:s.symbol,name:`${s.baseAsset} / ${s.quoteAsset}`}));
 }
 async function loadMoexSharesIndex(){
-  const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME');
+  const r=await fetchTO('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME',8000);
   if(!r.ok)throw new Error('moex');
   const j=await r.json(),c=j.securities.columns,rows=j.securities.data;
   const iS=c.indexOf('SECID'),iN=c.indexOf('SHORTNAME');
   return rows.map(x=>({sym:x[iS],name:x[iN]}));
 }
 async function loadFuturesIndex(){
-  const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME,LASTTRADEDATE');
+  const r=await fetchTO('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=securities&securities.columns=SECID,SHORTNAME,LASTTRADEDATE',8000);
   if(!r.ok)throw new Error('moex');
   const j=await r.json(),c=j.securities.columns,rows=j.securities.data;
   const iS=c.indexOf('SECID'),iN=c.indexOf('SHORTNAME'),iD=c.indexOf('LASTTRADEDATE');
   const today=new Date().toISOString().slice(0,10);
-  return rows
-    .filter(x=>!x[iD]||x[iD]>=today)
-    .map(x=>({sym:x[iS],name:x[iN]||x[iS]}));
+  return rows.filter(x=>!x[iD]||x[iD]>=today).map(x=>({sym:x[iS],name:x[iN]||x[iS]}));
 }
+
 async function ensureSearchIndex(){
-  if(searchIndex)return searchIndex;
+  if(searchIndex&&searchIndex.crypto&&searchIndex.crypto.length)return searchIndex;
   const c=store.get('searchIndex',null);
-  if(c&&c.ts>Date.now()-864e5&&c.data){
+  // 864e5 = 1 сутки. Раньше стояло 864e1 (8.6 сек) — это был баг!
+  if(c&&c.ts>Date.now()-864e5&&c.data&&c.data.crypto&&c.data.crypto.length){
     searchIndex=c.data;
-    if(SRC_ORDER.every(s=>(searchIndex[s]||[]).length>0))return searchIndex;
+    return searchIndex;
   }
-  const [crypto,moex,futures]=await Promise.all([
-    loadCryptoIndex().catch(()=>[]),
+  let crypto=[];
+  try{crypto=await loadCryptoIndex();}
+  catch(e){console.warn('[search] Binance index failed:',e);}
+  searchIndex={crypto,moex:[],futures:[]};
+  try{store.set('searchIndex',{ts:Date.now(),data:searchIndex})}catch(e){}
+  // MOEX/фьючерсы грузим в фоне — не блокируем поиск
+  Promise.all([
     loadMoexSharesIndex().catch(()=>[]),
     loadFuturesIndex().catch(()=>[])
-  ]);
-  searchIndex={crypto,moex,futures};
-  try{store.set('searchIndex',{ts:Date.now(),data:searchIndex})}catch(e){}
+  ]).then(([moex,futures])=>{
+    if(!searchIndex)return;
+    searchIndex.moex=moex;
+    searchIndex.futures=futures;
+    try{store.set('searchIndex',{ts:Date.now(),data:searchIndex})}catch(e){}
+    const modal=$('searchModal');
+    if(modal&&!modal.classList.contains('hidden')){
+      const q=($('sbInput').value||'').trim();
+      searchResults=searchSymbols(q,searchSrcFilter);
+      if(searchActive<0&&searchResults.length)searchActive=0;
+      renderSearchResults();
+      if(searchResults.length)scheduleQuotes();
+    }
+  });
   return searchIndex;
 }
 
@@ -754,10 +729,7 @@ function updateQuoteCells(){
 }
 
 let quoteTimer=null;
-function scheduleQuotes(){
-  clearTimeout(quoteTimer);
-  quoteTimer=setTimeout(loadQuotes,350);
-}
+function scheduleQuotes(){clearTimeout(quoteTimer);quoteTimer=setTimeout(loadQuotes,350);}
 
 async function loadQuotes(){
   const LIMIT=25;
@@ -768,46 +740,36 @@ async function loadQuotes(){
     else if(r.src==='futures'&&futures.length<LIMIT)futures.push(r.sym);
   });
   const jobs=[];
-
   if(crypto.length){
     jobs.push((async()=>{
       try{
         const q=encodeURIComponent(JSON.stringify(crypto));
         let r;
-        try{r=await fetch('https://data-api.binance.vision/api/v3/ticker/24hr?symbols='+q)}
-        catch(e){r=await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols='+q)}
+        try{r=await fetchTO('https://data-api.binance.vision/api/v3/ticker/24hr?symbols='+q,6000)}
+        catch(e){r=await fetchTO('https://api.binance.com/api/v3/ticker/24hr?symbols='+q,6000)}
         if(!r.ok)return;
-        (await r.json()).forEach(t=>{
-          px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent,vol:+t.quoteVolume};
-        });
+        (await r.json()).forEach(t=>{px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent,vol:+t.quoteVolume};});
       }catch(e){}
     })());
   }
-
   if(moex.length){
     jobs.push((async()=>{
       try{
-        const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+moex.join(','));
+        const r=await fetchTO('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+moex.join(','),8000);
         if(!r.ok)return;
-        (await r.json()).marketdata.data.forEach(x=>{
-          px['moex:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};
-        });
+        (await r.json()).marketdata.data.forEach(x=>{px['moex:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};});
       }catch(e){}
     })());
   }
-
   if(futures.length){
     jobs.push((async()=>{
       try{
-        const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+futures.join(','));
+        const r=await fetchTO('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+futures.join(','),8000);
         if(!r.ok)return;
-        (await r.json()).marketdata.data.forEach(x=>{
-          px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};
-        });
+        (await r.json()).marketdata.data.forEach(x=>{px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]};});
       }catch(e){}
     })());
   }
-
   await Promise.all(jobs);
   updateQuoteCells();
 }
@@ -816,9 +778,13 @@ function renderSearchResults(){
   const list=$('sbList');list.innerHTML='';
   if(!searchResults.length){
     const q=($('sbInput')?.value||'').trim();
-    const hint=searchIndex
-      ?(q?'Ничего не найдено':'Начните вводить тикер')
-      :'Загрузка списка…';
+    const total=(searchIndex?.crypto?.length||0)+(searchIndex?.moex?.length||0)+(searchIndex?.futures?.length||0);
+    let hint='Загрузка списка…';
+    if(searchIndex){
+      if(total===0)hint='Не удалось загрузить список.<br>Binance и MOEX недоступны.<br>Проверьте интернет / VPN / блокировщик.';
+      else if(q)hint='Ничего не найдено';
+      else hint='Начните вводить тикер';
+    }
     list.innerHTML='<div class="sb-empty">'+hint+'</div>';
     return;
   }
@@ -836,8 +802,7 @@ function renderSearchResults(){
     }
     const item=document.createElement('div');
     item.className='sb-item'+(idx===searchActive?' active':'');
-    item.dataset.sym=r.sym;
-    item.dataset.src=r.src;
+    item.dataset.sym=r.sym;item.dataset.src=r.src;
     item.innerHTML=`
       <div class="sb-item-sym">
         <div class="sb-sym">${r.sym}</div>
@@ -868,21 +833,19 @@ function selectSearchResult(r){
 function openSearch(){
   $('searchModal').classList.remove('hidden');
   $('sbInput').value='';
-  searchActive=-1;
-  searchResults=[];
-  searchSrcFilter='all';
+  searchActive=-1;searchResults=[];searchSrcFilter='all';
   document.querySelectorAll('#sbFilters button').forEach(b=>b.classList.toggle('on',b.dataset.src==='all'));
   $('sbList').innerHTML='<div class="sb-empty">Загрузка списка…</div>';
   setTimeout(()=>$('sbInput').focus(),0);
   ensureSearchIndex().then(()=>{
     const q=$('sbInput').value;
-    if(q.trim()){
-      searchResults=searchSymbols(q,searchSrcFilter);
-      searchActive=searchResults.length?0:-1;
-    }
+    if(q.trim()){searchResults=searchSymbols(q,searchSrcFilter);searchActive=searchResults.length?0:-1;}
     renderSearchResults();
     if(searchResults.length)scheduleQuotes();
-  }).catch(()=>{$('sbList').innerHTML='<div class="sb-empty">Не удалось загрузить список</div>'});
+  }).catch(err=>{
+    console.warn('[search] fatal:',err);
+    $('sbList').innerHTML='<div class="sb-empty">Не удалось загрузить список</div>';
+  });
 }
 function closeSearch(){$('searchModal').classList.add('hidden')}
 
@@ -897,18 +860,14 @@ document.querySelectorAll('#sbFilters button').forEach(btn=>{
     searchSrcFilter=btn.dataset.src;
     searchResults=searchSymbols($('sbInput').value,searchSrcFilter);
     searchActive=searchResults.length?0:-1;
-    renderSearchResults();
-    scrollToActive();
-    scheduleQuotes();
+    renderSearchResults();scrollToActive();scheduleQuotes();
   };
 });
 
 $('sbInput').addEventListener('input',e=>{
   searchResults=searchSymbols(e.target.value,searchSrcFilter);
   searchActive=searchResults.length?0:-1;
-  renderSearchResults();
-  scrollToActive();
-  scheduleQuotes();
+  renderSearchResults();scrollToActive();scheduleQuotes();
 });
 $('sbInput').addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();closeSearch();return}
@@ -921,14 +880,16 @@ $('sbInput').addEventListener('keydown',e=>{
 async function fetchBars(short){
   if(S.src==='crypto'){
     const q=`/api/v3/klines?symbol=${encodeURIComponent(S.sym)}&interval=${encodeURIComponent(S.tf)}&limit=500`;
-    let r;try{r=await fetch('https://data-api.binance.vision'+q)}catch(e){r=await fetch('https://api.binance.com'+q)}
+    let r;
+    try{r=await fetchTO('https://data-api.binance.vision'+q,8000)}
+    catch(e){r=await fetchTO('https://api.binance.com'+q,8000)}
     if(!r.ok)throw new Error('Binance: тикер '+S.sym+' не найден');
     return (await r.json()).map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
   }
   const days=short?(+S.tf===7?14:3):(DAYS[+S.tf]||30);
   const from=new Date(Date.now()-days*864e5).toISOString().slice(0,10);
   const base=S.src==='futures'?`https://iss.moex.com/iss/engines/futures/markets/forts/securities/${S.sym}/candles.json`:`https://iss.moex.com/iss/engines/stock/markets/shares/securities/${S.sym}/candles.json`;
-  const r=await fetch(`${base}?interval=${S.tf}&from=${from}`);
+  const r=await fetchTO(`${base}?interval=${S.tf}&from=${from}`,10000);
   if(!r.ok)throw new Error(S.src==='futures'?'MOEX (фьючерсы) недоступен':'MOEX недоступен');
   const j=await r.json(),c=j.candles.columns,rows=j.candles.data;
   if(!rows.length)throw new Error('Нет данных по '+S.sym);
@@ -1053,10 +1014,7 @@ async function pollMoex(id){
 }
 
 /* ============ ИНТЕРФЕЙС ============ */
-function getTF(src){
-  const custom=S.tfCustom[src]||{};
-  return {...TF_BASE[src],...custom};
-}
+function getTF(src){const custom=S.tfCustom[src]||{};return {...TF_BASE[src],...custom};}
 function buildTf(){
   const t=getTF(S.src);
   $('addTf').style.display=S.src==='crypto'?'':'none';
@@ -1091,27 +1049,15 @@ $('addTf').onclick=()=>{
   const unit=LAT_TO_CYR[m[2].toLowerCase()]||m[2].toLowerCase();
   const key=n+unit;
   let tfValue;
-
   if(S.src==='crypto'){
     const map={'с':'s','м':'m','ч':'h','д':'d','н':'w'};
     tfValue=n+map[unit];
-    if(!BINANCE_TF.has(tfValue)){
-      flash('Binance: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M');
-      return;
-    }
+    if(!BINANCE_TF.has(tfValue)){flash('Binance: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M');return;}
   }else{
-    if(!(key in MOEX_TF_MAP)){
-      flash('MOEX: только 1м, 10м, 1ч, 1д, 1н, 1мес, 1кв');
-      return;
-    }
+    if(!(key in MOEX_TF_MAP)){flash('MOEX: только 1м, 10м, 1ч, 1д, 1н, 1мес, 1кв');return;}
     tfValue=MOEX_TF_MAP[key];
   }
-
-  if(Object.values(getTF(S.src)).some(v=>String(v)===String(tfValue))){
-    flash('Такой интервал уже есть');
-    return;
-  }
-
+  if(Object.values(getTF(S.src)).some(v=>String(v)===String(tfValue))){flash('Такой интервал уже есть');return;}
   if(!S.tfCustom[S.src])S.tfCustom[S.src]={};
   S.tfCustom[S.src][key]=tfValue;
   store.set('tfCustom',S.tfCustom);
@@ -1135,10 +1081,7 @@ function open_(){
   saveDrawings();
   const raw=$('sym').value.trim();
   S.sym=raw?(S.src==='crypto'?raw.toUpperCase():raw):S.sym;
-  buildTf();
-  createSeries();
-  load(true);
-  save();
+  buildTf();createSeries();load(true);save();
 }
 $('go').onclick=open_;
 $('sym').addEventListener('keydown',e=>{if(e.key==='Enter')open_()});
@@ -1150,7 +1093,6 @@ let wl=store.get('wl',[
   {src:'moex',sym:'SBER'},{src:'moex',sym:'GAZP'}
 ]);
 const mq=matchMedia('(max-width:700px)');
-
 mq.addEventListener('change',()=>{
   if(!mq.matches){
     document.body.classList.remove('m-chart','m-list');
@@ -1164,9 +1106,7 @@ function view(v){
   const wasChart=document.body.classList.contains('m-chart');
   document.body.classList.toggle('m-chart',v==='chart');
   document.body.classList.toggle('m-list',v!=='chart');
-  if(v==='chart'&&mq.matches&&!wasChart){
-    try{history.pushState({c:1},'')}catch(e){}
-  }
+  if(v==='chart'&&mq.matches&&!wasChart){try{history.pushState({c:1},'')}catch(e){}}
 }
 function goList(){
   liveId++;if(ws){ws.onclose=null;ws.close();ws=null}clearInterval(poll);
@@ -1206,7 +1146,10 @@ async function loadPrices(){
   const fu=wl.filter(w=>w.src==='futures').map(w=>w.sym);
   const put=t=>{px['crypto:'+t.symbol]={last:+t.lastPrice,pct:+t.priceChangePercent,vol:+t.quoteVolume}};
   if(cr.length){
-    const base=async q=>{try{return await fetch('https://data-api.binance.vision'+q)}catch(e){return await fetch('https://api.binance.com'+q)}};
+    const base=async q=>{
+      try{return await fetchTO('https://data-api.binance.vision'+q,6000)}
+      catch(e){return await fetchTO('https://api.binance.com'+q,6000)}
+    };
     try{
       const r=await base('/api/v3/ticker/24hr?symbols='+encodeURIComponent(JSON.stringify(cr)));
       if(r.ok)(await r.json()).forEach(put);
@@ -1215,13 +1158,13 @@ async function loadPrices(){
   }
   if(mo.length){
     try{
-      const r=await fetch('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+mo.join(','));
+      const r=await fetchTO('https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+mo.join(','),8000);
       if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['moex:'+x[0]]={last:x[1],pct:x[2],vol:x[3]}});
     }catch(e){}
   }
   if(fu.length){
     try{
-      const r=await fetch('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+fu.join(','));
+      const r=await fetchTO('https://iss.moex.com/iss/engines/futures/markets/forts/securities.json?iss.only=marketdata&marketdata.columns=SECID,LAST,LASTTOPREVPRICE,VOLTODAY&securities='+fu.join(','),8000);
       if(r.ok)(await r.json()).marketdata.data.forEach(x=>{px['futures:'+x[0]]={last:x[1],pct:x[2],vol:x[3]}});
     }catch(e){}
   }
@@ -1249,10 +1192,7 @@ $('add').onclick=()=>{
   const src=detectSrc(s);
   const sym=src==='crypto'?s.toUpperCase():s;
   if(!wl.some(w=>w.sym===sym&&w.src===src)){
-    wl.push({src,sym});
-    store.set('wl',wl);
-    renderWl();
-    loadPrices();
+    wl.push({src,sym});store.set('wl',wl);renderWl();loadPrices();
   }
 };
 function save(){store.set('last',{src:S.src,sym:S.sym,tf:S.tf})}
@@ -1262,9 +1202,7 @@ const last=store.get('last',null);
 S.tfCustom=store.get('tfCustom',{});
 if(last){setSrc(last.src);S.sym=last.sym;S.tf=last.tf;$('sym').value=last.sym}
 buildTf();renderWl();renderPresets();renderAlerts();
-setupToolbar();
-createSeries();
-applyColors();
+setupToolbar();createSeries();applyColors();
 if(mq.matches)view('list');else load(true);
 loadPrices();
 setInterval(()=>{if(!document.hidden&&(!mq.matches||document.body.classList.contains('m-list')))loadPrices()},10000);

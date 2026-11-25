@@ -27,6 +27,7 @@ html, body {
   color: var(--text);
   font: 13px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-feature-settings: "tnum" 1, "ss01" 1;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -914,7 +915,7 @@ main {
 
 .sb-input input {
   flex: 1;
-  font-size: 15px;
+  font-size: 16px;
   padding: 4px 0;
   background: transparent;
   border: 0;
@@ -1083,6 +1084,7 @@ main {
   color: var(--dim);
   font-size: 12px;
   padding: 34px 20px;
+  line-height: 1.6;
 }
 
 .sb-footer {
@@ -1171,7 +1173,6 @@ main {
 }
 
 @media (max-width: 700px) {
-  /* Layout: list mode */
   body.m-list #wrap,
   body.m-list #drawing-toolbar { display: none; }
   body.m-list #side {
@@ -1182,16 +1183,13 @@ main {
     padding: 12px 10px;
   }
 
-  /* Layout: chart mode */
   body.m-chart #side,
   body.m-chart #bottom { display: none; }
 
-  /* Compact header */
   .brand { display: none; }
   #indBtn, #settingsBtn { display: none; }
   header.topbar { gap: 5px; padding: 0 8px; }
 
-  /* Source buttons -> К М Ф */
   #srcG button {
     font-size: 0;
     padding: 4px 6px;
@@ -1202,7 +1200,6 @@ main {
   #srcM::after { content: 'М'; font-size: 11px; }
   #srcF::after { content: 'Ф'; font-size: 11px; }
 
-  /* Go button -> → */
   #go {
     font-size: 0;
     padding: 4px 8px;
@@ -1214,23 +1211,16 @@ main {
   #sym { width: 92px; height: 30px; }
   #searchBtn { width: 30px; height: 30px; }
 
-  /* Back only on chart view */
   body.m-chart #back { display: inline-block; }
 
-  /* Touch targets */
   .wl { padding: 12px 8px; }
   .wl .x { width: 32px; height: 32px; font-size: 16px; }
   .sb-item { padding: 12px 14px; }
   .ind-item { padding: 11px 12px; }
   .bottom-tabs button { padding: 8px 12px; }
 
-  /* Search modal full width */
   #searchBox { width: 96vw; max-height: 82vh; }
-
-  /* Bottom drawer a bit shorter on phone */
   #bottom { height: 200px; }
-
-  /* Legend smaller */
   #legend { font-size: 11px; left: 10px; top: 8px; }
   #legend b { font-size: 12px; }
 }
