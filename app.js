@@ -1,5 +1,5 @@
 import { createChart, CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
-import { DrawingManager } from 'lightweight-charts-drawing';
+import { createDrawings } from './drawings.js';
 
 const TF_BASE={
   crypto:{'1с':'1s','5с':'5s','15с':'15s','30с':'30s','1м':'1m','5м':'5m','15м':'15m','30м':'30m','1ч':'1h','2ч':'2h','4ч':'4h','8ч':'8h','1д':'1d','1н':'1w','1мес':'1M'},
@@ -38,11 +38,18 @@ const chart=createChart($('chart'),{
   timeScale:{borderColor:C.chartBorder,timeVisible:true,secondsVisible:false},
   crosshair:{mode:0},autoSize:true});
 
-let main=null,vol=null,drawingManager=null;
-let magnetEnabled=false;
+let main=null,vol=null;
+let drawings=null;
+/* Движок рисования (drawings.js) живёт всё время и не пересоздаётся вместе с серией */
+drawings=createDrawings({
+  chart,wrap:$('wrap'),
+  getSeries:()=>main,getBars:()=>S.data,
+  storage:store,fmtPrice:n=>fmtPrice(n),
+  toast:m=>flash(m),
+  onState:()=>syncToolbar()
+});
 
 function createSeries(){
-  if(drawingManager){try{drawingManager.destroy()}catch(e){}drawingManager=null}
   if(main){try{chart.removeSeries(main)}catch(e){}main=null}
   if(vol){try{chart.removeSeries(vol)}catch(e){}vol=null}
   indicators.forEach(ind=>{
@@ -55,8 +62,7 @@ function createSeries(){
     :chart.addSeries(LineSeries,{color:C.line,lineWidth:2,priceScaleId:'right'});
   vol=chart.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'v'});
   chart.priceScale('v').applyOptions({scaleMargins:{top:.8,bottom:0}});
-  drawingManager=new DrawingManager(chart,main,{magnet:magnetEnabled?'weak':'off'});
-  loadDrawings();
+  drawings.markDirty();
   activeIndicators.forEach(key=>{try{addIndicatorById(key,true)}catch(e){}});
 }
 
@@ -108,6 +114,7 @@ function paint(){
   main.setData(S.data.map(val));
   vol.setData(S.data.map(b=>({time:b.time,value:b.volume,color:b.close>=b.open?C.up+'55':C.down+'55'})));
   indicators.forEach(ind=>updateIndicator(ind));
+  drawings.markDirty();
 }
 
 /* ============ ИНДИКАТОРЫ ============ */
@@ -321,51 +328,14 @@ $('presetSave').onclick=()=>{
 $('themeReset').onclick=()=>{C={...DEFAULTS};applyColors();syncInputs()};
 
 /* ============ РИСОВАНИЕ ============ */
-const drawingsKey=()=>'drawings:'+S.src+':'+S.sym;
-function saveDrawings(){if(!drawingManager)return;try{store.set(drawingsKey(),drawingManager.exportJSON())}catch(e){}}
-let saveTimer=null;
-function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDrawings,400)}
-function loadDrawings(){if(!drawingManager)return;try{const j=store.get(drawingsKey(),null);if(j)drawingManager.importJSON(j)}catch(e){}}
-function tryDeleteSelected(){
-  if(!drawingManager)return false;
-  const ms=['removeSelectedDrawings','removeSelectedDrawing','removeSelected','deleteSelectedDrawing','deleteSelected','removeDrawing','deleteDrawing'];
-  for(const m of ms){if(typeof drawingManager[m]==='function'){try{drawingManager[m]();return true}catch(e){}}}
-  return false;
-}
-function tryClearAll(){
-  if(!drawingManager)return false;
-  const ms=['clear','clearAll','removeAll','deleteAll','importJSON'];
-  for(const m of ms){if(typeof drawingManager[m]==='function'){try{if(m==='importJSON')drawingManager[m]('[]');else drawingManager[m]();return true}catch(e){}}}
-  return false;
-}
-function deleteAtEvent(ev){
-  if(!drawingManager)return;
-  const rect=chart.chartElement().getBoundingClientRect();
-  const x=ev.clientX-rect.left,y=ev.clientY-rect.top;
-  const drawings=(drawingManager.drawings?.()||[]).slice().reverse();
-  const TOL=8;
-  for(const d of drawings){
-    if(!d.points?.length)continue;
-    let minX=1/0,maxX=-1/0,minY=1/0,maxY=-1/0;
-    for(const pt of d.points){
-      const px=chart.timeScale().timeToCoordinate(pt.time);
-      const py=main.priceToCoordinate(pt.price);
-      if(px==null||py==null)continue;
-      minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
-    }
-    if(!isFinite(minX))continue;
-    if(x>=minX-TOL&&x<=maxX+TOL&&y>=minY-TOL&&y<=maxY+TOL){
-      drawingManager.remove(d.id);scheduleSave();flash('Фигура удалена');return;
-    }
-  }
-}
-chart.chartElement().addEventListener('mousedown',ev=>{
-  if(ev.button===1){ev.preventDefault();ev.stopPropagation();deleteAtEvent(ev)}
-},{capture:true});
-['mouseup','touchend'].forEach(evt=>{
-  chart.chartElement().addEventListener(evt,()=>{if(drawingManager)scheduleSave()},{passive:true});
-});
-setInterval(()=>{if(drawingManager)saveDrawings()},5000);
+/* Весь движок — в drawings.js. Ключ хранения привязан к тикеру; движок помнит
+   СВОЙ текущий ключ, поэтому flush() всегда пишет под тем тикером, где рисовали
+   (раньше ключ строился из уже изменённого S.src и портил данные). */
+const drawingsKey=()=>'dr2:'+S.src+':'+S.sym;
+function saveDrawings(){drawings.flush()}
+function loadDrawings(){drawings.load(drawingsKey())}
+addEventListener('pagehide',saveDrawings);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDrawings()});
 
 /* ============ ПАНЕЛЬ ИНСТРУМЕНТОВ ============ */
 const toolGroups=[
@@ -411,55 +381,84 @@ const toolGroups=[
   ]}
 ];
 
+const toolMeta={};
+toolGroups.forEach(g=>g.tools.forEach(t=>{toolMeta[t.kind]=t}));
+const groupLast={};
+function closeToolMenus(){document.querySelectorAll('#drawing-toolbar .drawing-group-menu.open').forEach(m=>m.classList.remove('open'))}
+document.addEventListener('click',e=>{if(!e.target.closest('#drawing-toolbar'))closeToolMenus()});
+document.addEventListener('touchstart',e=>{if(!e.target.closest('#drawing-toolbar'))closeToolMenus()},{passive:true});
+function placeMenu(btn,menu){
+  const r=btn.getBoundingClientRect();
+  menu.style.left=(r.right+6)+'px';
+  const h=menu.offsetHeight;
+  menu.style.top=Math.max(8,Math.min(r.top,window.innerHeight-h-8))+'px';
+}
 function setupToolbar(){
   const tb=$('drawing-toolbar');tb.innerHTML='';
-  const cursorBtn=document.createElement('button');
-  cursorBtn.className='cursor-btn active';cursorBtn.innerHTML='✛';cursorBtn.title='Курсор (Esc)';
-  cursorBtn.onclick=()=>{activateTool('cross');setActive(cursorBtn)};
-  tb.appendChild(cursorBtn);
-  const magnetBtn=document.createElement('button');
-  magnetBtn.className='magnet-btn';magnetBtn.innerHTML=magnetEnabled?'⌁':'○';
-  magnetBtn.title='Магнит';
-  magnetBtn.onclick=()=>{
-    magnetEnabled=!magnetEnabled;
-    if(drawingManager)drawingManager.setMagnet(magnetEnabled?'weak':'off');
-    magnetBtn.innerHTML=magnetEnabled?'⌁':'○';
-    magnetBtn.classList.toggle('active',magnetEnabled);
+  const mk=(cls,html,title,fn)=>{
+    const b=document.createElement('button');
+    b.className=cls;b.innerHTML=html;b.title=title;b.onclick=e=>{e.stopPropagation();fn()};
+    tb.appendChild(b);return b;
   };
-  if(magnetEnabled)magnetBtn.classList.add('active');
-  tb.appendChild(magnetBtn);
+  mk('cursor-btn','✛','Курсор (Esc)',()=>{closeToolMenus();drawings.setTool('cross')});
+  mk('magnet-btn','🧲','Магнит',()=>{drawings.cycleMagnet()});
+  mk('keep-btn','🔒','Оставаться в режиме рисования',()=>{drawings.setKeep(!drawings.getKeep())});
   toolGroups.forEach(group=>{
     const g=document.createElement('div');g.className='drawing-group';
-    const btn=document.createElement('button');btn.innerHTML=group.icon;btn.title=group.title;
-    btn.onclick=e=>{e.stopPropagation();if(group.tools[0])activateTool(group.tools[0].kind,btn)};
+    const btn=document.createElement('button');btn.className='group-btn';btn.dataset.group=group.title;
+    btn.innerHTML=(groupLast[group.title]||group.tools[0]).icon;btn.title=group.title;
     const menu=document.createElement('div');menu.className='drawing-group-menu';
     group.tools.forEach(t=>{
-      const b=document.createElement('button');
+      const b=document.createElement('button');b.dataset.kind=t.kind;
       b.innerHTML=`<span>${t.icon}</span><span>${t.label}</span>`;
-      b.onclick=()=>{activateTool(t.kind,btn);menu.style.display='none'};
+      b.onclick=e=>{e.stopPropagation();groupLast[group.title]=t;btn.innerHTML=t.icon;closeToolMenus();activateTool(t.kind)};
       menu.appendChild(b);
     });
+    btn.onclick=e=>{
+      e.stopPropagation();
+      const was=menu.classList.contains('open');
+      closeToolMenus();
+      if(!was){menu.classList.add('open');placeMenu(btn,menu)}
+    };
     g.append(btn,menu);tb.appendChild(g);
   });
-  const clearBtn=document.createElement('button');
-  clearBtn.className='clear-btn';clearBtn.innerHTML='×';clearBtn.title='Удалить все рисунки';
-  clearBtn.onclick=()=>{
-    if(!drawingManager)return;
+  const sp=document.createElement('div');sp.className='tb-spacer';tb.appendChild(sp);
+  mk('undo-btn','↶','Отменить (Ctrl+Z)',()=>{drawings.undo()});
+  mk('redo-btn','↷','Повторить (Ctrl+Y)',()=>{drawings.redo()});
+  mk('hide-btn','👁','Скрыть / показать рисунки (Ctrl+Alt+H)',()=>{drawings.toggleHidden()});
+  mk('clear-btn','🗑','Удалить все рисунки',()=>{
+    if(!drawings.count())return;
     if(!confirm('Удалить все рисунки для '+S.sym+'?'))return;
-    tryClearAll();store.set(drawingsKey(),'[]');flash('Все рисунки удалены');
-  };
-  tb.appendChild(clearBtn);
+    drawings.clearAll();flash('Все рисунки удалены');
+  });
+  syncToolbar();
 }
-function setActive(btn){
-  document.querySelectorAll('#drawing-toolbar button').forEach(b=>b.classList.remove('active'));
-  if(btn)btn.classList.add('active');
+function syncToolbar(){
+  if(!drawings)return;
+  const tb=$('drawing-toolbar');if(!tb)return;
+  const tool=drawings.getTool();
+  const q=s=>tb.querySelector(s);
+  q('.cursor-btn')?.classList.toggle('active',tool==='cross');
+  const mg=drawings.getMagnet(),mb=q('.magnet-btn');
+  if(mb){
+    mb.classList.toggle('active',mg!=='off');
+    mb.dataset.lvl=mg==='weak'?'1':mg==='strong'?'2':'';
+    mb.title='Магнит: '+({off:'выкл',weak:'слабый',strong:'сильный'}[mg]);
+  }
+  q('.keep-btn')?.classList.toggle('active',drawings.getKeep());
+  q('.hide-btn')?.classList.toggle('active',drawings.isHidden());
+  const u=q('.undo-btn'),r=q('.redo-btn');
+  if(u)u.disabled=!drawings.canUndo();
+  if(r)r.disabled=!drawings.canRedo();
+  toolGroups.forEach(group=>{
+    const gb=tb.querySelector('.group-btn[data-group="'+group.title+'"]');
+    if(gb)gb.classList.toggle('active',group.tools.some(t=>t.kind===tool));
+  });
+  tb.querySelectorAll('.drawing-group-menu button').forEach(b=>b.classList.toggle('active',b.dataset.kind===tool));
 }
-function activateTool(kind,btn){
-  if(!drawingManager)return;
-  try{drawingManager.setTool(kind)}catch(e){console.warn('Tool not supported:',kind);try{drawingManager.setTool('cross')}catch(_){}}
-  if(btn)setActive(btn);
-  else if(kind==='cross')setActive(document.querySelector('.cursor-btn'));
-  else document.querySelectorAll('#drawing-toolbar button').forEach(b=>b.classList.remove('active'));
+function activateTool(kind){
+  closeToolMenus();
+  drawings.setTool(kind);
 }
 
 /* ============ КОНТЕКСТНОЕ МЕНЮ ============ */
@@ -470,11 +469,7 @@ function showCtx(x,y){
     {label:'Индикаторы…',hot:'/',act:openIndicators},
     {label:'Настройки графика…',hot:'',act:openSettings},
     {sep:true},
-    {label:'Скрыть все рисунки',hot:'Ctrl+Alt+H',act:()=>{
-      if(!drawingManager)return;
-      try{drawingManager.hideAll?.()}catch(e){}
-      document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');
-    }},
+    {label:'Скрыть / показать рисунки',hot:'Ctrl+Alt+H',act:()=>{drawings.toggleHidden()}},
     {label:'Сбросить масштаб',hot:'',act:()=>{chart.timeScale().fitContent();focusToPrice(S.data.length)}},
     {sep:true},
     {label:'Скопировать тикер',hot:'',act:()=>{navigator.clipboard?.writeText(S.sym);flash('Скопировано: '+S.sym)}},
@@ -500,6 +495,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#ctxMenu'))hideCtx()
 
 /* ============ ГОРЯЧИЕ КЛАВИШИ ============ */
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!$('indicatorsModal').classList.contains('hidden')){closeIndicators();return}
   const tag=(e.target.tagName||'').toUpperCase();
   const inInput=tag==='INPUT'||tag==='TEXTAREA'||e.target.isContentEditable;
   if(inInput)return;
@@ -507,13 +503,14 @@ document.addEventListener('keydown',e=>{
   if(ctrl&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();return}
   if(e.key==='/'){e.preventDefault();openIndicators();return}
   if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='a'){e.preventDefault();$('bottom').classList.toggle('collapsed');return}
-  if(ctrl&&e.altKey&&e.key.toLowerCase()==='h'){e.preventDefault();document.querySelectorAll('canvas').forEach(c=>c.style.opacity=c.style.opacity==='0'?'1':'0');return}
+  if(ctrl&&e.altKey&&e.key.toLowerCase()==='h'){e.preventDefault();drawings.toggleHidden();return}
   if(ctrl&&e.key.toLowerCase()==='s'){e.preventDefault();saveDrawings();save();flash('Сохранено');return}
-  if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();if(tryDeleteSelected()){scheduleSave();flash('Фигура удалена')}return}
-  if(e.key==='Escape'){activateTool('cross',document.querySelector('.cursor-btn'));hideCtx();closeSearch();closeIndicators();return}
-  if(ctrl&&e.key.toLowerCase()==='z'){if(typeof drawingManager?.undo==='function'){e.preventDefault();drawingManager.undo();scheduleSave()}return}
-  if(ctrl&&e.key.toLowerCase()==='y'){if(typeof drawingManager?.redo==='function'){e.preventDefault();drawingManager.redo();scheduleSave()}return}
-  const map={'t':'trend-line','h':'horizontal-line','v':'vertical-line','r':'rectangle','f':'fib-retracement'};
+  if(e.key==='Delete'||e.key==='Backspace'){if(drawings.deleteSelected()){e.preventDefault();flash('Фигура удалена')}return}
+  if(e.key==='Escape'){drawings.escape();hideCtx();closeSearch();closeIndicators();return}
+  if(ctrl&&e.key.toLowerCase()==='z'){e.preventDefault();if(e.shiftKey)drawings.redo();else drawings.undo();return}
+  if(ctrl&&e.key.toLowerCase()==='y'){e.preventDefault();drawings.redo();return}
+  if(ctrl&&e.key.toLowerCase()==='d'){if(drawings.hasSelection()){e.preventDefault();drawings.duplicate()}return}
+  const map={'t':'trend-line','h':'horizontal-line','v':'vertical-line','r':'rectangle','f':'fib-retracement','b':'brush','a':'arrow','l':'long-position','s':'short-position','x':'text'};
   if(map[e.key.toLowerCase()]&&!ctrl&&!e.altKey){e.preventDefault();activateTool(map[e.key.toLowerCase()]);}
 });
 
@@ -1081,7 +1078,7 @@ function open_(){
   saveDrawings();
   const raw=$('sym').value.trim();
   S.sym=raw?(S.src==='crypto'?raw.toUpperCase():raw):S.sym;
-  buildTf();createSeries();load(true);save();
+  buildTf();createSeries();loadDrawings();load(true);save();
 }
 $('go').onclick=open_;
 $('sym').addEventListener('keydown',e=>{if(e.key==='Enter')open_()});
@@ -1202,7 +1199,7 @@ const last=store.get('last',null);
 S.tfCustom=store.get('tfCustom',{});
 if(last){setSrc(last.src);S.sym=last.sym;S.tf=last.tf;$('sym').value=last.sym}
 buildTf();renderWl();renderPresets();renderAlerts();
-setupToolbar();createSeries();applyColors();
+setupToolbar();createSeries();loadDrawings();applyColors();
 if(mq.matches)view('list');else load(true);
 loadPrices();
 setInterval(()=>{if(!document.hidden&&(!mq.matches||document.body.classList.contains('m-list')))loadPrices()},10000);
