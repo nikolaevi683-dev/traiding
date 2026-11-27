@@ -15,15 +15,15 @@ const CSS = `
 .dr-canvas{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2}
 .dr-bar{position:absolute;bottom:42px;left:50%;transform:translateX(-50%);z-index:7;display:none;
   align-items:center;gap:4px;padding:5px 6px;background:var(--panel,#151d27);color:var(--text,#dce3ec);
-  border:1px solid var(--line,#34404d);border-radius:10px;box-shadow:0 8px 28px #0009;
+  border:1px solid var(--line,#34404d);border-radius:6px;box-shadow:0 6px 20px #0007;
   max-width:calc(100% - 12px);touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .dr-bar.on{display:flex}
 .dr-bar button,.dr-bar select,.dr-bar input[type=color]{height:34px;min-width:34px;padding:0 8px;font-size:14px;
   background:transparent;color:inherit;border:1px solid transparent;border-radius:6px;cursor:pointer}
 .dr-bar input[type=color]{padding:2px;width:36px;background:transparent}
-.dr-bar button:hover,.dr-bar select:hover{background:#1c2734;border-color:#2d3a49}
-.dr-bar button.on{background:#1a2a40;border-color:#344e75;color:#a9c6ff}
-.dr-bar .b-del:hover{background:#351e24;color:var(--down,#e06464)}
+.dr-bar button:hover,.dr-bar select:hover{background:var(--hover,#2a2e39);border-color:transparent}
+.dr-bar button.on{background:rgba(41,98,255,.22);border-color:transparent;color:#7ba3ff}
+.dr-bar .b-del:hover{background:rgba(242,54,69,.16);color:var(--down,#f23645)}
 .dr-bar select{padding:0 4px;background:var(--panel,#151d27)}
 .dr-bar .sep{width:1px;height:20px;background:var(--line,#34404d);margin:0 2px}
 #wrap.dr-pointer,#wrap.dr-pointer *{cursor:pointer!important}
@@ -827,11 +827,25 @@ export function createDrawings(o) {
     try { if (s) { e = s.priceToCoordinate(1); f = s.priceToCoordinate(100000); } } catch (_) {}
     return [wrap.clientWidth, wrap.clientHeight, n, n ? b[n - 1].time : 0, a, c, e, f, plotH].join('|');
   }
-  function loop() {
+  /* Перерисовка по событиям; опрос геометрии — только пока палец/мышь на графике
+     или сразу после (шкала цены тянется без событий), в покое — раз в ~150 мс. */
+  let pressing = false, boostUntil = 0, lastPoll = 0;
+  const press = () => { pressing = true; };
+  const release = () => { pressing = false; boostUntil = performance.now() + 400; };
+  wrap.addEventListener('pointerdown', press, true);
+  window.addEventListener('pointerup', release, true);
+  window.addEventListener('pointercancel', release, true);
+  wrap.addEventListener('wheel', () => { boostUntil = performance.now() + 400; }, { passive: true, capture: true });
+  ts.subscribeVisibleLogicalRangeChange(() => { dirty = true; });
+  function loop(now) {
     requestAnimationFrame(loop);
     try {
+      if (dirty) { sig = signature(); dirty = false; render(); return; }
+      now = now || performance.now();
+      if (!(pressing || now < boostUntil) && now - lastPoll < 150) return;
+      lastPoll = now;
       const sg = signature();
-      if (dirty || sg !== sig) { sig = sg; dirty = false; render(); }
+      if (sg !== sig) { sig = sg; dirty = false; render(); }
     } catch (e) { console.warn('[drawings] render', e); }
   }
 
@@ -1045,7 +1059,7 @@ export function createDrawings(o) {
     '<button class="b-txt" title="Изменить текст">T</button>' +
     '<span class="sep"></span>' +
     '<button class="b-dup" title="Дублировать">⧉</button>' +
-    '<button class="b-del" title="Удалить">🗑</button>';
+    '<button class="b-del" title="Удалить"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>';
   wrap.appendChild(bar);
   const bCol = bar.querySelector('.b-col'), bW = bar.querySelector('.b-w'), bDash = bar.querySelector('.b-dash'),
     bTxt = bar.querySelector('.b-txt'), bDup = bar.querySelector('.b-dup'), bDel = bar.querySelector('.b-del');
@@ -1090,7 +1104,7 @@ export function createDrawings(o) {
     deleteSelected, clearAll, undo, redo, duplicate,
     canUndo: () => undoS.length > 0, canRedo: () => redoS.length > 0,
     hasSelection: () => !!selId, count: () => drawings.length,
-    select, add, render,
+    select, add, render, canvas: cv,
     // для тестов
     __test: { pointerDown, pointerMove, pointerUp, get drawings() { return drawings; }, get draft() { return draft; }, hitDrawing, ptFromXY, t2i, i2t, kinds: () => Object.keys(TOOLS) }
   };
